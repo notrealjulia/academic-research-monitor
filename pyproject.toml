@@ -1,0 +1,21 @@
+[project]
+name = "academic-research-monitor"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "openai>=3.19",
+]
+
+[project.scripts]
+find_categories = "find_categories:main"
+fetch_papers = "fetch_papers:main"
+find_paper_matches = "find_paper_matches:main"
+research_monitor = "research_monitor:main"
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = { "" = "scripts" }
+py-modules = ["find_categories", "fetch_papers", "find_paper_matches", "research_monitor"]

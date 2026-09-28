@@ -1,0 +1,139 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns="http://www.w3.org/2005/Atom">
+  <id>https://arxiv.org/api/uA2Y2YlrcWIc4dvCQoqHMQSmkRs</id>
+  <title>arXiv Query: search_query=(cat:cs.CL OR cat:cs.LG) AND submittedDate:"202609210757 TO 202609280757"&amp;id_list=&amp;start=0&amp;max_results=5</title>
+  <updated>2026-09-28T07:56:53Z</updated>
+  <link href="https://arxiv.org/api/query?search_query=(cat:cs.CL+OR+cat:cs.LG)+AND+submittedDate:%22202609210757+TO+202609280757%22&amp;start=0&amp;max_results=5&amp;id_list=" type="application/atom+xml"/>
+  <opensearch:itemsPerPage>5</opensearch:itemsPerPage>
+  <opensearch:totalResults>1069</opensearch:totalResults>
+  <opensearch:startIndex>0</opensearch:startIndex>
+  <entry>
+    <id>http://arxiv.org/abs/2609.31619v1</id>
+    <title>Learning to Stop without Learning to Stop: Self-Supervised Confidence Training Improves Reasoning Efficiency</title>
+    <updated>2026-09-25T17:59:52Z</updated>
+    <link href="https://arxiv.org/abs/2609.31619v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2609.31619v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Reasoning models often generate very long reasoning traces, making inference computationally expensive. Existing approaches typically improve efficiency either through inference-time early-stopping mechanisms or by explicitly encouraging shorter reasoning during training, for example through reinforcement learning with length penalties. We show that substantial efficiency gains can instead emerge from a different kind of supervision: \textit{confidence}. Using a self-supervised procedure, we fine-tune reasoning models to predict their confidence in the answer at intermediate points along their own reasoning trajectories using only 600 training problems. Confidence is used only as a training target: the loss contains no objective for reasoning length, efficiency, or stopping. At inference, the fine-tuned models use the standard generation procedure, with no confidence elicitation or early-stopping mechanism. Despite this, self-supervised confidence fine-tuning makes reasoning more efficient, reducing generated tokens by up to 25\% at matched accuracy across Gemma, Qwen, Nemotron, and GPT-OSS models on mathematical, scientific, and coding reasoning benchmarks, with efficiency gains comparable to methods that explicitly optimize for shorter reasoning. Analysis of reasoning episodes further shows that confidence supervision largely preserves the base models' high-level reasoning composition rather than selectively suppressing particular behaviors. Our results suggest that efficient reasoning may emerge as a downstream consequence of learning metacognitive signals, without being directly optimized.</summary>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-09-25T17:59:52Z</published>
+    <arxiv:primary_category term="cs.AI"/>
+    <author>
+      <name>Parsa Hosseini</name>
+    </author>
+    <author>
+      <name>Akasha Tigalappanavara</name>
+    </author>
+    <author>
+      <name>Sumit Nawathe</name>
+    </author>
+    <author>
+      <name>Chenrui Fan</name>
+    </author>
+    <author>
+      <name>Sourya Basu</name>
+    </author>
+    <author>
+      <name>Genta Indra Winata</name>
+    </author>
+    <author>
+      <name>Anirban Das</name>
+    </author>
+    <author>
+      <name>Soheil Feizi</name>
+    </author>
+    <author>
+      <name>Nima Chitsazan</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2609.31614v1</id>
+    <title>Gap-free Differentially Private PCA for Gaussian Data</title>
+    <updated>2026-09-25T17:58:38Z</updated>
+    <link href="https://arxiv.org/abs/2609.31614v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2609.31614v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>We give a gap-free differentially private algorithm for the principal component analysis (PCA) problem with Gaussian data.</summary>
+    <category term="cs.DS" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-09-25T17:58:38Z</published>
+    <arxiv:primary_category term="cs.DS"/>
+    <author>
+      <name>Alina Ene</name>
+    </author>
+    <author>
+      <name>Huy L. Nguyen</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2609.31612v1</id>
+    <title>First-Order Stationarity of Reverse Diffusions</title>
+    <updated>2026-09-25T17:57:43Z</updated>
+    <link href="https://arxiv.org/abs/2609.31612v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2609.31612v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Recent literature has shown a strong connection between optimization and sampling. We develop the corresponding first-order theory for diffusion models. First, the SDE-based reverse-time flows of overdamped and underdamped Langevin diffusions contract relative Fisher divergences at explicit exponential rates whenever the stationary potential of the forward process is strongly convex---a condition on the noising process one chooses, not on the data. This is a unique advantage of SDE-based reverse diffusion, absent in the reverse process based on ODEs. Second, we incorporate discretization and establish averaged first-order stationarity bounds---the sampling analog of averaged gradient-norm guarantees in nonconvex optimization---for samplers of both overdamped and underdamped diffusion models. As in nonconvex optimization, the convexity-free certificate is local: it guarantees score consistency, not global mode weights.</summary>
+    <category term="stat.ML" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-09-25T17:57:43Z</published>
+    <arxiv:primary_category term="stat.ML"/>
+    <author>
+      <name>Zhifeng Chen</name>
+    </author>
+    <author>
+      <name>Chenyang Jiang</name>
+    </author>
+    <author>
+      <name>Yazhen Wang</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2609.31607v1</id>
+    <title>Statistical attribute alignment for black-box generative AI via output post-processing</title>
+    <updated>2026-09-25T17:55:49Z</updated>
+    <link href="https://arxiv.org/abs/2609.31607v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2609.31607v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Generative AI systems are increasingly used, but aligning their outputs with user requirements poses a continuing challenge. Here, we aim to ensure that the distribution of an attribute of an AI-generated output aligns with a user-specified target. This is motivated by examples such as fairness, where we want to ensure that a protected attribute (e.g., gender, race, or age categories) follows a desired distribution, and synthetic data generation, where we want the generated data to be representative of a target distribution. We study the practically important black-box access setting, where a user can repeatedly query a generative AI model. The goal is to return $m\ge 1$ outputs whose joint attribute distribution is as close as possible to this target. For both exact and approximate alignment, we develop algorithms that minimize the expected number of queries to the generator, and we further demonstrate their optimality as the number of requested outputs $m \rightarrow \infty$. Experiments on text-to-image generation and geocoded persona generation tasks show that our post-processing algorithms improve statistical attribute alignment, complementing prompting-based interventions.</summary>
+    <category term="stat.ME" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="math.ST" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-09-25T17:55:49Z</published>
+    <arxiv:primary_category term="stat.ME"/>
+    <author>
+      <name>Kevin Jiang</name>
+    </author>
+    <author>
+      <name>Morgane Austern</name>
+    </author>
+    <author>
+      <name>Edgar Dobriban</name>
+    </author>
+    <author>
+      <name>Jason M. Klusowski</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2609.31603v1</id>
+    <title>User Model Extraction via Belief Self-Distillation</title>
+    <updated>2026-09-25T17:54:32Z</updated>
+    <link href="https://arxiv.org/abs/2609.31603v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2609.31603v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Large language models (LLMs) implicitly infer attributes of their users and adapt their behavior accordingly, yet these beliefs remain difficult to inspect and causally manipulate. We introduce Belief Self-Distillation (BSD), a unified read-write framework that bridges linear and causal probing by learning a compact user representation that can be both decoded and written back into the model. The frozen LLM acts as its own teacher, distilling beliefs from natural conversations without external annotations. Unlike conventional probing, BSD isolates not only information present in activations, but a state whose causal role can be directly tested. Across multiple model families, BSD faithfully recovers user beliefs and enables substantially stronger interventions than matched hidden-state steering. Crucially, we find that refusal depends not only on the request, but on the model's inferred user intent: changing this belief alters refusal while holding the request fixed. We further uncover a striking cross-model regularity: independently trained LLMs converge on a shared geometry for representing their users. Together, these results reveal implicit user models as readable and causally writable internal states with direct implications for AI safety, shaping how models condition safety decisions on whom they believe they are interacting with.</summary>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-09-25T17:54:32Z</published>
+    <arxiv:primary_category term="cs.LG"/>
+    <author>
+      <name>Ali Holmov</name>
+    </author>
+    <author>
+      <name>Yiran Huang</name>
+    </author>
+    <author>
+      <name>Kirill Bykov</name>
+    </author>
+    <author>
+      <name>Zeynep Akata</name>
+    </author>
+  </entry>
+</feed>
