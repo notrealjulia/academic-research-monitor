@@ -144,7 +144,25 @@ class FlowTest(unittest.TestCase):
         self.assertEqual(query, "(cat:cs.CL) AND submittedDate:[202609210000 TO 202609222359]")
         self.assertIn("from 21-09-2026 00:00 UTC through 22-09-2026 23:59 UTC (2 days, inclusive)", out)
         self.assertIn("Retrieved 3 unique papers", out)
+        self.assertNotIn("Sample of retrieved papers", out)
+        self.assertIn(f"Saved to {self.retrieved}\n\nStep 4 of 5", out)
         self.assertEqual(len(self.rows(self.retrieved)), 3)
+
+    def test_fetch_finishes_and_saves_before_step_4(self):
+        answers = ScriptedInput("revised: MT", "a", "21-09-2026", "22-09-2026", "", "n")
+        seen = {}
+
+        def watching_input(prompt=""):
+            if prompt.startswith("Optional: add details"):
+                seen["rows_on_disk"] = len(self.rows(self.retrieved))
+                seen["fetch_requests"] = len(self.arxiv.queries)
+            return answers(prompt)
+
+        self.arxiv = FakeArxiv(list(PAPERS))
+        with mock.patch("builtins.input", watching_input), mock.patch("fetch_papers.fetch_page", self.arxiv), \
+                contextlib.redirect_stdout(io.StringIO()):
+            rm.main()
+        self.assertEqual(seen, {"rows_on_disk": 3, "fetch_requests": 1})
 
     def test_no_papers_stops_before_matching(self):
         out, code = self.run_flow("revised: MT", "a", "21-09-2026", "21-09-2026", papers=[])

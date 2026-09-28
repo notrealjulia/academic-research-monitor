@@ -1,3 +1,6 @@
+import contextlib
+import io
+import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
@@ -76,6 +79,104 @@ class FetchPapersTest(unittest.TestCase):
         with mock.patch("fetch_papers.fetch_page", lambda q, s: pages[s].pop(0)):
             with self.assertRaisesRegex(fp.SetupError, "after 3 tries: empty page"):
                 fp.fetch_papers(["cs.CL"], utc(2026, 9, 21, 0, 0), utc(2026, 9, 21, 23, 59))
+
+
+class FakeTerminal(io.StringIO):
+    def isatty(self):
+        return True
+
+
+def screen(raw):
+    """What a terminal would show: each carriage return redraws the current line."""
+    return "\n".join(line.rsplit("\r", 1)[-1] for line in raw.split("\n"))
+
+
+WINDOW = (utc(2026, 9, 21, 0, 0), utc(2026, 9, 21, 23, 59))
+MANY = [entry(f"2609.{i:05d}", "2026-09-21T01:00:00Z") for i in range(1069)]
+
+
+@mock.patch("fetch_papers.time.sleep", lambda s: None)
+class ProgressTest(unittest.TestCase):
+    def fetch(self, fake_page, terminal=True):
+        out = FakeTerminal() if terminal else io.StringIO()
+        error = None
+        with mock.patch("fetch_papers.fetch_page", fake_page), contextlib.redirect_stdout(out):
+            try:
+                papers, total = fp.fetch_papers(["cs.CL"], *WINDOW)
+            except fp.SetupError as e:
+                papers, error = None, e
+        return out.getvalue(), papers, error
+
+    def test_bar_redraws_in_place_and_ends_with_newline(self):
+        raw, papers, _ = self.fetch(FakeArxiv(MANY))
+        self.assertEqual(len(papers), 1069)
+        self.assertEqual(raw.count("\r"), 3)  # one redraw per page
+        self.assertTrue(raw.endswith("\n"))
+        self.assertEqual(screen(raw).splitlines(), [
+            "arXiv reports 1,069 papers. Fetching 500 per request, 3 s apart...",
+            "  [##############################] 1,069/1,069",
+        ])
+        self.assertIn("\r  [##############................]   500/1,069", raw)
+        self.assertIn("\r  [############################..] 1,000/1,069", raw)
+
+    def test_retry_notice_gets_its_own_line(self):
+        arxiv, failed = FakeArxiv(MANY), []
+
+        def flaky(query, start):  # the page at 500 comes back empty once, then succeeds
+            if start == 500 and not failed:
+                failed.append(start)
+                return feed([], total=1069)
+            return arxiv(query, start)
+
+        raw, papers, _ = self.fetch(flaky)
+        self.assertEqual(len(papers), 1069)
+        self.assertEqual(screen(raw).splitlines(), [
+            "arXiv reports 1,069 papers. Fetching 500 per request, 3 s apart...",
+            "  [##############................]   500/1,069",
+            "  arXiv request at result 500 failed (empty page); retrying (2/3)...",
+            "  [##############################] 1,069/1,069",
+        ])
+
+    def test_failure_closes_the_bar_line_before_the_error(self):
+        arxiv = FakeArxiv(MANY)
+        raw, papers, error = self.fetch(lambda q, s: feed([], total=1069) if s == 500 else arxiv(q, s))
+        self.assertIn("after 3 tries: empty page", str(error))
+        self.assertTrue(raw.endswith("\n"))
+        self.assertEqual(screen(raw).splitlines()[-2:], [
+            "  arXiv request at result 500 failed (empty page); retrying (3/3)...",
+            "  [##############................]   500/1,069",
+        ])
+
+    def test_redirected_output_prints_one_plain_line_per_page(self):
+        raw, papers, _ = self.fetch(FakeArxiv(MANY), terminal=False)
+        self.assertNotIn("\r", raw)
+        self.assertEqual(raw.splitlines()[1:], [
+            "  [##############................]   500/1,069",
+            "  [############################..] 1,000/1,069",
+            "  [##############################] 1,069/1,069",
+        ])
+
+    def test_no_papers_draws_no_bar(self):
+        raw, papers, _ = self.fetch(FakeArxiv([]))
+        self.assertEqual(papers, [])
+        self.assertEqual(raw, "arXiv reports 0 papers. Fetching 500 per request, 3 s apart...\n")
+
+
+@mock.patch("fetch_papers.time.sleep", lambda s: None)
+class MainOutputTest(unittest.TestCase):
+    def test_prints_count_and_path_without_samples(self):
+        tmp = Path(tempfile.mkdtemp()) / "retrieved.csv"
+        arxiv = FakeArxiv([entry("2609.00001", "2026-09-21T01:00:00Z"), entry("2609.00002", "2026-09-21T02:00:00Z")])
+        save = fp.save_papers
+        with mock.patch("fetch_papers.fetch_page", arxiv), mock.patch("fetch_papers.load_codes", lambda: (["cs.CL"], [])), \
+                mock.patch("fetch_papers.save_papers", lambda papers: save(papers, tmp)), \
+                mock.patch("sys.argv", ["fetch_papers", "2026-09-21"]), contextlib.redirect_stdout(io.StringIO()) as out:
+            fp.main()
+        text = out.getvalue()
+        self.assertIn("Retrieved 2 unique papers submitted on 2026-09-21 (arXiv reported 2).", text)
+        self.assertIn(f"Saved to {fp.RETRIEVED}", text)
+        self.assertNotIn("Sample of retrieved papers", text)
+        self.assertEqual(len(tmp.read_text(encoding="utf-8").splitlines()), 3)  # header + 2 papers
 
 
 if __name__ == "__main__":

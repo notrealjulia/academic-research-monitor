@@ -124,38 +124,69 @@ def fetch_page(query, start):
     return result.stdout
 
 
+def progress_bar(done, total, width=30):
+    filled = width * done // total if total else width
+    count_width = len(f"{total:,}")
+    return f"  [{'#' * filled}{'.' * (width - filled)}] {done:>{count_width},}/{total:,}"
+
+
+def draw_progress(done, total):
+    """Redraw the progress line in place on a terminal; print one line per page otherwise.
+
+    Returns True while the terminal line is left open (no newline yet).
+    """
+    if sys.stdout.isatty():
+        print("\r" + progress_bar(done, total), end="", flush=True)
+        return True
+    print(progress_bar(done, total))
+    return False
+
+
 def fetch_papers(codes, start, end):
     """Fetch every paper matching the query, one page at a time, following arXiv's rate limit."""
     query = build_query(codes, start, end)
     papers, offset, total, last_request = {}, 0, None, 0.0
-    while total is None or offset < total:
-        for attempt in range(1, ARXIV_RETRIES + 1):
-            time.sleep(max(0.0, last_request + ARXIV_DELAY * attempt - time.monotonic()))
-            last_request = time.monotonic()
-            try:
-                page_total, page = parse_feed(fetch_page(query, offset))
-            except (FetchError, ET.ParseError) as e:
-                error = e
-                continue
-            # arXiv occasionally returns an empty page mid-way; retry rather than stop early.
-            if page or page_total <= offset:
-                break
-            error = "empty page"
-        else:
-            raise SetupError(f"arXiv request failed at result {offset} after {ARXIV_RETRIES} tries: {error}")
+    bar_open = False
+    try:
+        while total is None or offset < total:
+            for attempt in range(1, ARXIV_RETRIES + 1):
+                if attempt > 1:
+                    if bar_open:
+                        print()  # keep the retry notice off the progress line
+                        bar_open = False
+                    print(f"  arXiv request at result {offset:,} failed ({error}); "
+                          f"retrying ({attempt}/{ARXIV_RETRIES})...")
+                    if total:
+                        bar_open = draw_progress(offset, total)
+                time.sleep(max(0.0, last_request + ARXIV_DELAY * attempt - time.monotonic()))
+                last_request = time.monotonic()
+                try:
+                    page_total, page = parse_feed(fetch_page(query, offset))
+                except (FetchError, ET.ParseError) as e:
+                    error = e
+                    continue
+                # arXiv occasionally returns an empty page mid-way; retry rather than stop early.
+                if page or page_total <= offset:
+                    break
+                error = "empty page"
+            else:
+                raise SetupError(f"arXiv request failed at result {offset} after {ARXIV_RETRIES} tries: {error}")
 
-        if total is None:
-            total = page_total
-            if total > ARXIV_MAX_RESULTS:
-                raise SetupError(f"{total} papers match, more than arXiv's {ARXIV_MAX_RESULTS}-result limit. "
-                                 "Use fewer categories or a shorter date range.")
-            print(f"arXiv reports {total} papers. Fetching {PAGE_SIZE} per request, 3 s apart...")
-        if not page:
-            break  # the result set shrank while paging; nothing more to fetch
-        for p in page:
-            papers.setdefault(p["arxiv_id"], p)  # deduplicate
-        offset += len(page)
-        print(f"  fetched {min(offset, total)}/{total}")
+            if total is None:
+                total = page_total
+                if total > ARXIV_MAX_RESULTS:
+                    raise SetupError(f"{total} papers match, more than arXiv's {ARXIV_MAX_RESULTS}-result limit. "
+                                     "Use fewer categories or a shorter date range.")
+                print(f"arXiv reports {total:,} papers. Fetching {PAGE_SIZE} per request, 3 s apart...")
+            if not page:
+                break  # the result set shrank while paging; nothing more to fetch
+            for p in page:
+                papers.setdefault(p["arxiv_id"], p)  # deduplicate
+            offset += len(page)
+            bar_open = draw_progress(min(offset, total), total)
+    finally:
+        if bar_open:
+            print()  # finish the progress line before any error or summary
 
     # submittedDate is the v1 submission time; double-check the window locally (minute precision).
     lo, hi = f"{start:%Y-%m-%dT%H:%M}", f"{end:%Y-%m-%dT%H:%M}"
@@ -214,9 +245,7 @@ def main():
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"\nRetrieved {len(papers)} unique papers submitted on {day} (arXiv reported {total}).")
-    if papers:
-        show_samples(papers)
+    print(f"\nRetrieved {len(papers):,} unique papers submitted on {day} (arXiv reported {total:,}).")
     save_papers(papers)
     print(f"Saved to {RETRIEVED}")
 

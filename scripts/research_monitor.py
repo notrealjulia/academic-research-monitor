@@ -150,13 +150,12 @@ def run():
     print(f"\nStep 3 of 5: fetching papers in {', '.join(codes)} (primary or cross-listed)")
     papers, total = fp.fetch_papers(codes, *utc_window(start, end))
     fp.save_papers(papers, RETRIEVED)
-    print(f"\nRetrieved {len(papers)} unique papers (arXiv reported {total}). Saved to {RETRIEVED}")
+    print(f"\nRetrieved {len(papers):,} unique papers (arXiv reported {total:,}). Saved to {RETRIEVED}")
     if not papers:
         leave("No papers were found for these categories and dates, so there is nothing to match. "
               "Try a wider date range.")
-    fp.show_samples(papers)
 
-    print("Step 4 of 5: what to look for")
+    print("\nStep 4 of 5: what to look for")
     print(f"Your research description:\n  {interest}")
     details = ask("Optional: add details about which papers you want (Enter to skip):\n> ")
 
