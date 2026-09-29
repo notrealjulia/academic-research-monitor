@@ -23,7 +23,7 @@ No database, cache, scheduler or UI. Don't add one without a demonstrated need.
 - Modules live in `scripts/` and are registered in `pyproject.toml` `[project.scripts]`. After adding or renaming a command, run `pip install -e .`.
 - `find_categories.py` also holds the shared pieces: `ROOT`, `MODEL`, `SetupError`, `load_api_key`.
 - Per module: plain functions for parsing, validation and CSV I/O. Exactly one function makes the provider call (`ask_model`, `match_batch`). It imports `openai` lazily and turns SDK errors into `SetupError`. Everything else must run offline.
-- LLM output is never trusted as data. Validate returned codes and IDs against what was sent (taxonomy codes, batch IDs), and take names and metadata from our CSVs, not from the model.
+- LLM output is never trusted as data. Validate returned codes and labels against what was sent (taxonomy codes, per-batch paper labels), and take names and metadata from our CSVs, not from the model. The matcher sends short per-batch labels (P01, P02, …), not arXiv IDs, and maps them back in code. Saved results keep arXiv IDs.
 - `SetupError` means a user-fixable problem: print one line, exit 1, no traceback. Usage errors exit 2.
 - Use plain functions and dicts. The only classes are pydantic response schemas and `SetupError`.
 

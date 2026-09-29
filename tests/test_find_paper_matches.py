@@ -26,7 +26,7 @@ class MatchPapersTest(unittest.TestCase):
         self.assertEqual(text, "Researcher's interests:\nMT for Yoruba\n\n"
                                "Additional details about which papers the researcher wants:\nOnly evaluation papers.")
 
-    def test_matches_only_ids_from_the_batch(self):
+    def test_matches_only_labels_from_the_batch(self):
         with mock.patch("builtins.print"):
             matches, done, error = fm.match_papers("MT", self.papers, FAKE_KEY, "Only evaluation.")
         self.assertIsNone(error)
@@ -44,10 +44,35 @@ class MatchPapersTest(unittest.TestCase):
         self.assertEqual(done, len(FakeOpenAI.inputs) - 1)
         self.assertGreaterEqual(done, 1)
 
-    def test_collect_accepts_versioned_and_prefixed_ids(self):
+    def test_prompt_uses_labels_not_arxiv_ids(self):
+        text = fm.format_batch(self.papers[:2])
+        self.assertEqual(text, "Paper: P01\nTitle: Machine translation study\nAbstract: Abstract 0.\n\n"
+                               "Paper: P02\nTitle: Something else\nAbstract: Abstract 1.")
+        self.assertNotIn("2609.", text)
+
+    def test_collect_maps_labels_to_papers(self):
+        got = fm.collect([("P01", " a "), ("p03", "c")], self.papers[:3])
+        self.assertEqual(got, {"2609.00000": "a", "2609.00002": "c"})
+
+    def test_collect_rejects_unknown_labels(self):
         batch = self.papers[:2]
-        got = fm.collect([("2609.00000v2", "a"), ("arXiv:2609.00001", "b"), ("2609.99999", "c")], batch)
-        self.assertEqual(got, {"2609.00000": "a", "2609.00001": "b"})
+        got = fm.collect([("P03", "x"), ("P00", "x"), ("2609.00000", "x"), ("", "x"), ("P1", "x")], batch)
+        self.assertEqual(got, {})
+
+    def test_collect_keeps_first_reason_for_duplicate_labels(self):
+        got = fm.collect([("P02", "first"), ("P02", "second"), (" p02", "third")], self.papers[:2])
+        self.assertEqual(got, {"2609.00001": "first"})
+
+    def test_same_label_in_different_batches_maps_to_each_batchs_paper(self):
+        first, second = self.papers[:40], self.papers[40:80]
+        self.assertEqual(fm.collect([("P01", "a")], first), {"2609.00000": "a"})
+        self.assertEqual(fm.collect([("P01", "b")], second), {"2609.00040": "b"})
+        # Through the full run: every batch reuses P01, P11, ... and each maps to its own paper.
+        with mock.patch("builtins.print"):
+            matches, _, _ = fm.match_papers("MT", self.papers, FAKE_KEY)
+        self.assertTrue(all("Paper: P01\n" in i for i in FakeOpenAI.inputs))
+        self.assertEqual({m["arxiv_id"] for m in matches}, {f"2609.{i:05d}" for i in range(0, 100, 10)})
+        self.assertTrue(all(m["title"] == "Machine translation study" for m in matches))
 
 
 if __name__ == "__main__":

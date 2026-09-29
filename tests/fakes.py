@@ -73,9 +73,9 @@ class FakeOpenAI:
             import httpx2
             import openai
             raise openai.APIConnectionError(request=httpx2.Request("POST", "https://api.openai.com/v1/responses"))
-        ids = re.findall(r"^ID: (\S+)$", input, re.M)
+        labels = re.findall(r"^Paper: (\S+)$", input, re.M)
         titles = re.findall(r"^Title: (.*)$", input, re.M)
-        picks = [{"arxiv_id": i, "reason": f"Mentions {self.keyword}."}
-                 for i, t in zip(ids, titles) if self.keyword in t.lower()]
-        picks.append({"arxiv_id": "9999.99999", "reason": "An ID that was not in the batch."})
+        picks = [{"label": lab, "reason": f"Mentions {self.keyword}."}
+                 for lab, t in zip(labels, titles) if self.keyword in t.lower()]
+        picks.append({"label": "P99", "reason": "A label that was not in the batch."})
         return SimpleNamespace(output_parsed=text_format(matches=picks))

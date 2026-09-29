@@ -13,7 +13,7 @@ import csv
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from fetch_papers import PAPER_FIELDS, RETRIEVED, SELECTED, show_samples, strip_version
+from fetch_papers import PAPER_FIELDS, RETRIEVED, SELECTED, show_samples
 from find_categories import MODEL, ROOT, SetupError, load_api_key
 
 OUT = ROOT / "data" / "paper_matches.csv"
@@ -23,12 +23,14 @@ BATCH_SIZE = 40  # papers per OpenAI request
 WORKERS = 4  # parallel OpenAI requests
 
 INSTRUCTIONS = """You screen new arXiv papers for a researcher.
-You get the researcher's description of their interests and a batch of papers (ID, title, abstract).
+You get the researcher's description of their interests and a batch of papers (label, title, abstract).
 Return only the papers the researcher would plausibly want to read, judged from the title and abstract alone.
 Respect anything the researcher says they are not interested in.
 Be selective: a paper that merely shares a broad area (e.g. "uses language models") is not enough.
 Returning no papers is fine.
-For each match, give one short sentence saying what in this specific paper connects to the researcher's interests."""
+For each match, return the paper's label exactly as given (e.g. P07) and one short sentence saying what in this
+specific paper connects to the researcher's interests. The sentence must be supported by that paper's own abstract,
+not by any other paper in the batch."""
 
 
 def load_papers(path=RETRIEVED):
@@ -51,8 +53,20 @@ def stored_interest(path=SELECTED):
     return rows[0].get("interest", "").strip() if rows else None
 
 
+def label(i):
+    """Label of the i-th paper (1-based) within its batch: P01, P02, ..."""
+    return f"P{i:02d}"
+
+
+def batch_labels(batch):
+    return {label(i): p for i, p in enumerate(batch, 1)}
+
+
 def format_batch(batch):
-    return "\n\n".join(f"ID: {p['arxiv_id']}\nTitle: {p['title']}\nAbstract: {p['abstract']}" for p in batch)
+    # Short per-batch labels instead of arXiv IDs: long, similar-looking IDs are easy for the model to
+    # miscopy or swap. Labels are mapped back to the paper records in collect().
+    return "\n\n".join(f"Paper: {lab}\nTitle: {p['title']}\nAbstract: {p['abstract']}"
+                       for lab, p in batch_labels(batch).items())
 
 
 def format_interest(interest, details=""):
@@ -72,7 +86,7 @@ def match_batch(client, interest, batch, details=""):
     from pydantic import BaseModel
 
     class Match(BaseModel):
-        arxiv_id: str
+        label: str
         reason: str
 
     class Matches(BaseModel):
@@ -96,17 +110,20 @@ def match_batch(client, interest, batch, details=""):
         raise SetupError(f"OpenAI API error {e.status_code}: {e.message}")
     if response.output_parsed is None:
         raise SetupError("The model returned no usable answer for a batch (it may have refused).")
-    return [(m.arxiv_id, m.reason) for m in response.output_parsed.matches]
+    return [(m.label, m.reason) for m in response.output_parsed.matches]
 
 
 def collect(results, batch):
-    """Map returned IDs to reasons, keeping only IDs that were in the batch."""
-    batch_ids = {p["arxiv_id"] for p in batch}
+    """Map returned labels to {arxiv_id: reason} for this batch.
+
+    Labels not in this batch are dropped; a repeated label keeps its first reason.
+    """
+    by_label = batch_labels(batch)
     reasons = {}
-    for arxiv_id, reason in results:
-        arxiv_id = strip_version(arxiv_id.strip().removeprefix("arXiv:"))
-        if arxiv_id in batch_ids:
-            reasons.setdefault(arxiv_id, reason.strip())
+    for lab, reason in results:
+        paper = by_label.get(lab.strip().upper())
+        if paper is not None:
+            reasons.setdefault(paper["arxiv_id"], reason.strip())
     return reasons
 
 
