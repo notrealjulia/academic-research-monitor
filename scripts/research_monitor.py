@@ -6,10 +6,12 @@ Usage:
 A thin layer over find_categories, fetch_papers and find_paper_matches. Each stage
 saves the same CSV as its standalone command, and only after the user has accepted
 the previous stage:
-  1. Suggest categories for the interest; save data/selected_categories.csv only if accepted.
+  1. Check the description with the model (input_check), then suggest categories;
+     save data/selected_categories.csv only if accepted.
   2. Ask for an inclusive UTC date range (dd-mm-yyyy).
   3. Fetch every paper first submitted in that range; save data/retrieved_papers.csv.
-  4. Ask for optional extra details, kept separate from the original description.
+  4. Ask for optional extra details (checked by input_check unless empty), kept separate
+     from the original description.
   5. Show the number of OpenAI requests; match and save data/paper_matches.csv only if confirmed.
   6. After matching, write a readable report to data/research_report.txt.
 
@@ -24,6 +26,7 @@ from datetime import date, datetime, time as dtime, timezone
 import fetch_papers as fp
 import find_categories as fc
 import find_paper_matches as fm
+import input_check as ic
 
 SELECTED = fp.SELECTED
 RETRIEVED = fp.RETRIEVED
@@ -42,7 +45,7 @@ def ask(prompt):
     saved and sent to the model as part of the answer.
     """
     try:
-        return input(prompt).replace("﻿", "").strip()
+        return input(prompt).replace("\N{ZERO WIDTH NO-BREAK SPACE}", "").strip()
     except EOFError:
         leave()
 
@@ -60,11 +63,72 @@ def ask_description(prompt):
         print("Please enter a description.")
 
 
+def choose(options):
+    """Show options like {"r": "Revise description", "x": "Exit"} and return the chosen key."""
+    menu = "  ".join(f"[{k}] {label}" for k, label in options.items())
+    while True:
+        choice = ask(f"{menu}\n> ").lower()
+        if choice in options:
+            return choice
+        keys = list(options)
+        print(f"Please type {', '.join(keys[:-1])} or {keys[-1]}.")
+
+
+# --- Input checks ----------------------------------------------------------
+
+UNRELATED_DESCRIPTION = ("This tool finds new academic papers on arXiv. Please enter only your research interests: "
+                         "a topic, method or kind of paper you want to follow, without instructions to the program.")
+UNRELATED_DETAILS = ("These details are only used to narrow down which papers are selected. Please enter only "
+                     "topics, methods, languages or paper types to include or leave out, without instructions "
+                     "to the program.")
+
+
+def checked_description(text, api_key):
+    """Check a description until it is usable. Returns the accepted text; exits if the user chooses to."""
+    while True:
+        print("\nChecking your description...")
+        verdict, question = ic.check_description(text, api_key)
+        if verdict == "usable":
+            return text
+        if verdict == "needs_detail":
+            print(f"Your description is too general to pick useful papers. {question}")
+            options = {"r": "Revise description", "x": "Exit"}
+        else:
+            print(UNRELATED_DESCRIPTION)
+            options = {"r": "Try again", "x": "Exit"}
+        if choose(options) == "x":
+            leave("Exited. No categories were saved.")
+        print(f"\nCurrent description:\n  {text}")
+        text = ask_description("Revised description:\n> ")
+
+
+def ask_details(interest, api_key):
+    """Ask for optional details; an empty answer skips without calling the model. Returns "" when skipped."""
+    prompt = "Optional: add details about which papers you want (Enter to skip):\n> "
+    while True:
+        details = ask(prompt)
+        if not details:
+            return ""
+        print("\nChecking your details...")
+        verdict, question = ic.check_details(details, interest, api_key)
+        if verdict == "usable":
+            return details
+        if verdict == "needs_detail":
+            print(f"These details are too vague to use. {question}")
+            options = {"r": "Rewrite details", "s": "Skip details"}
+        else:
+            print(UNRELATED_DETAILS)
+            options = {"r": "Try again", "s": "Skip details"}
+        if choose(options) == "s":
+            return ""
+        prompt = "Details (Enter to skip):\n> "
+
+
 # --- 1. Categories ---------------------------------------------------------
 
 def choose_categories(taxonomy, api_key):
     """Suggest categories until the user accepts. Returns (interest, rows)."""
-    interest = ask_description("Describe your research interests:\n> ")
+    interest = checked_description(ask_description("Describe your research interests:\n> "), api_key)
     while True:
         print(f"\nAsking {fc.MODEL} to match your description against {len(taxonomy)} arXiv categories...\n")
         rows, rejected = fc.validate(fc.ask_model(interest, taxonomy, api_key), taxonomy)
@@ -81,7 +145,7 @@ def choose_categories(taxonomy, api_key):
                 return interest, rows
             if choice == "r":
                 print(f"\nCurrent description:\n  {interest}")
-                interest = ask_description("Revised description:\n> ")
+                interest = checked_description(ask_description("Revised description:\n> "), api_key)
                 break
             if choice == "x":
                 leave("Exited. No categories were saved.")
@@ -239,7 +303,7 @@ def run():
 
     print("\nStep 4 of 5: what to look for")
     print(f"Your research description:\n  {interest}")
-    details = ask("Optional: add details about which papers you want (Enter to skip):\n> ")
+    details = ask_details(interest, api_key)
 
     print("\nStep 5 of 5: matching")
     batches = fm.request_count(papers)

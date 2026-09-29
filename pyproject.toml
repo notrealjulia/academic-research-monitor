@@ -18,4 +18,4 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 package-dir = { "" = "scripts" }
-py-modules = ["find_categories", "fetch_papers", "find_paper_matches", "research_monitor"]
+py-modules = ["find_categories", "fetch_papers", "find_paper_matches", "input_check", "research_monitor"]

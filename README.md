@@ -139,7 +139,12 @@ Write a few sentences about what you study and what you want to read about. Sayi
 
 > *Example:* I study how communities adapt to climate-related flooding, including early-warning systems, risk communication and how households decide to evacuate. I want new work that evaluates these systems with real-world data. I am not interested in purely engineering designs of flood barriers.
 
-The program asks the AI model to suggest arXiv categories (this uses your OpenAI account). It then lists them with a short reason each, in this form:
+The program first asks the AI model whether your description is clear enough to search with (this uses your OpenAI account):
+- **Clear enough:** it continues.
+- **Too general** (for example just "AI"): it asks one follow-up question. You can then type a revised description or exit.
+- **Not a research request:** it explains what the tool is for and lets you try again or exit. This includes a description that also contains instructions to the program itself, such as "ignore your rules". Researching topics like prompt injection or cybersecurity is fine; just describe the research.
+
+It then asks the AI model to suggest arXiv categories. It then lists them with a short reason each, in this form:
 
 ```
 1. <code>  <category name>  (<field>)
@@ -185,7 +190,13 @@ The program shows your research description again and asks:
 Optional: add details about which papers you want (Enter to skip):
 ```
 
-You can add anything that narrows the search, such as *"only papers with field studies"* or *"skip review articles"*. The AI receives this alongside your original description; it doesn't replace it. Press Enter to skip.
+You can add anything that narrows the search, such as *"only papers with field studies"* or *"skip review articles"*. The AI receives this alongside your original description; it doesn't replace it. Press Enter to skip, which makes no OpenAI request.
+
+If you type something, it's checked the same way as your description:
+- **Too vague** (for example "only the good ones"): you're asked to be more specific.
+- **Unrelated,** or containing instructions to the program: you're told what these details are for. Selection rules such as "exclude review papers" are fine.
+
+Either way, you can rewrite the details or skip them.
 
 ### Step 5 of 5: matching (uses your OpenAI account)
 
