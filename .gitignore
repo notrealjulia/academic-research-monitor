@@ -5,3 +5,4 @@ __pycache__/
 data/selected_categories.csv
 data/retrieved_papers.csv
 data/paper_matches.csv
+data/research_report.txt

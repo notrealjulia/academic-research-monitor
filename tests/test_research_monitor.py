@@ -61,6 +61,59 @@ class ChooseDatesTest(unittest.TestCase):
         self.assertEqual(cm.exception.code, 0)
 
 
+LONG_ABSTRACT = " ".join(f"Sentence {i} of a long abstract about translation evaluation." for i in range(40))
+CATEGORIES = [{"code": "cs.CL", "field": "Computer Science", "subfield": "", "subject": "Computation and Language"},
+              {"code": "astro-ph.CO", "field": "Physics", "subfield": "Astrophysics",
+               "subject": "Cosmology and Nongalactic Astrophysics"}]
+MATCH = {"arxiv_id": "2609.00001", "title": "Low-resource machine translation evaluation",
+         "authors": "Ada Lovelace; Alan Turing", "submitted": "2026-09-21T09:05:59Z",
+         "url": "https://arxiv.org/abs/2609.00001", "abstract": LONG_ABSTRACT,
+         "match_reason": "Evaluates translation quality for low-resource languages."}
+
+
+class BuildReportTest(unittest.TestCase):
+    def report(self, matches=(MATCH,), details="Only evaluation papers.", done=1, batches=1, error=None):
+        from datetime import datetime, timezone
+        return rm.build_report("MT for Yoruba and Twi.", details, CATEGORIES, date(2026, 9, 21), date(2026, 9, 22),
+                               [MATCH] * 50, list(matches), done, batches, error,
+                               datetime(2026, 9, 28, 12, 30, tzinfo=timezone.utc))
+
+    def test_contains_search_and_counts(self):
+        text = self.report()
+        top = "\n".join(text.splitlines()[:8])
+        self.assertIn("title and abstract only. The full papers were not read.", " ".join(top.split()))
+        for expected in ["Created: 28-09-2026 12:30 UTC", "MT for Yoruba and Twi.", "Only evaluation papers.",
+                         "cs.CL              Computation and Language (Computer Science)",
+                         "astro-ph.CO        Cosmology and Nongalactic Astrophysics (Physics > Astrophysics)",
+                         "Papers retrieved from arXiv: 50", "Papers selected as matches:  1"]:
+            self.assertIn(expected, text)
+        self.assertIn("from 21-09-2026 00:00 UTC through 22-09-2026 23:59 UTC (2 days, inclusive)",
+                      " ".join(text.split()))  # wrapped across lines in the file
+
+    def test_each_match_has_details_and_full_abstract(self):
+        text = self.report()
+        for expected in ["1. Low-resource machine translation evaluation", "Authors: Ada Lovelace, Alan Turing",
+                         "First submitted: 21-09-2026 09:05 UTC", "arXiv: https://arxiv.org/abs/2609.00001",
+                         "Evaluates translation quality for low-resource languages."]:
+            self.assertIn(expected, text)
+        abstract_part = text.split("Abstract:")[1]
+        self.assertEqual(" ".join(abstract_part.split()), LONG_ABSTRACT)  # complete, only re-wrapped
+        self.assertTrue(all(len(line) <= rm.REPORT_WIDTH for line in text.splitlines()))
+
+    def test_no_details_and_no_matches(self):
+        text = self.report(matches=(), details="")
+        self.assertIn("Additional details:\n  (none)", text)
+        self.assertIn("Papers selected as matches:  0", text)
+        self.assertIn("No papers were selected as matches for your description.", text)
+
+    def test_incomplete_run_is_flagged_at_the_top(self):
+        text = self.report(done=2, batches=5, error="Could not reach the OpenAI API.")
+        top = text.split("YOUR SEARCH")[0]
+        self.assertIn("INCOMPLETE: matching stopped early.", top)
+        self.assertIn("Only 2 of 5 request batches finished", " ".join(top.split()))
+        self.assertIn("Papers selected as matches:  1 (from the 2 of 5 batches that finished)", text)
+
+
 def picks_for(interest, taxonomy, api_key):
     """Stands in for find_categories.ask_model: different picks per description, plus an invented code."""
     assert api_key == FAKE_KEY
@@ -87,7 +140,10 @@ class FlowTest(unittest.TestCase):
         self.selected, self.retrieved, self.matches = tmp / "selected.csv", tmp / "retrieved.csv", tmp / "matches.csv"
         self.selected.write_text("code,field,subfield,subject,reason,interest\nastro-ph.CO,,,,old,old interest\n",
                                  encoding="utf-8")
-        for name, path in [("SELECTED", self.selected), ("RETRIEVED", self.retrieved), ("MATCHES", self.matches)]:
+        self.report = tmp / "research_report.txt"
+        self.report.write_text("OLD REPORT from an earlier run\n", encoding="utf-8")
+        for name, path in [("SELECTED", self.selected), ("RETRIEVED", self.retrieved), ("MATCHES", self.matches),
+                           ("REPORT", self.report)]:
             patcher = mock.patch.object(rm, name, path)
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -117,6 +173,7 @@ class FlowTest(unittest.TestCase):
         self.assertIn("No categories were saved", out)
         self.assertEqual(self.rows(self.selected)[0]["interest"], "old interest")  # untouched
         self.assertEqual(self.arxiv.queries, [])
+        self.assertEqual(self.report.read_text(encoding="utf-8"), "OLD REPORT from an earlier run\n")  # still matches
 
     def test_revise_then_accept_saves_only_accepted_suggestion(self):
         out, code = self.run_flow("first try", "?", "r", "", "revised: MT", "a", "x")
@@ -204,6 +261,46 @@ class FlowTest(unittest.TestCase):
         self.assertEqual([r["arxiv_id"] for r in rows], ["2609.00003", "2609.00001"])  # invented ID dropped
         self.assertIn("title and abstract only", out)
         self.assertIn("2 of the 3 retrieved papers look relevant", out)
+
+    # --- report
+
+    def test_full_run_writes_report(self):
+        out, code = self.run_flow("revised: MT", "a", "21-09-2026", "22-09-2026", "Only evaluation.", "y")
+        text = self.report.read_text(encoding="utf-8")
+        self.assertIn(f"Report saved to {self.report}", out)
+        self.assertNotIn("OLD REPORT", text)
+        self.assertIn("revised: MT", text)
+        self.assertIn("Only evaluation.", text)
+        self.assertIn("cs.CL", text)
+        self.assertIn("Papers retrieved from arXiv: 3", text)
+        self.assertIn("Papers selected as matches:  2", text)
+        self.assertIn("Translation quality estimation for Yoruba", text)
+        self.assertNotIn("Graph neural networks", text)  # not a match
+
+    def test_declining_matching_removes_old_report(self):
+        out, code = self.run_flow("revised: MT", "a", "21-09-2026", "22-09-2026", "", "n")
+        self.assertFalse(self.report.exists())
+        self.assertIn("Removed the previous report (research_report.txt)", out)
+        self.assertIn("no report was written", out)
+
+    def test_no_papers_leaves_no_report(self):
+        out, code = self.run_flow("revised: MT", "a", "21-09-2026", "21-09-2026", papers=[])
+        self.assertFalse(self.report.exists())
+
+    def test_zero_matches_still_writes_report(self):
+        FakeOpenAI.reset(keyword="no title contains this")
+        out, code = self.run_flow("revised: MT", "a", "21-09-2026", "22-09-2026", "", "y")
+        text = self.report.read_text(encoding="utf-8")
+        self.assertIn("Papers selected as matches:  0", text)
+        self.assertIn("No papers were selected as matches for your description.", text)
+
+    def test_failed_matching_writes_report_marked_incomplete(self):
+        FakeOpenAI.reset(fail_on_call=1)
+        out, code = self.run_flow("revised: MT", "a", "21-09-2026", "22-09-2026", "", "y")
+        text = self.report.read_text(encoding="utf-8")
+        self.assertIn(f"Incomplete report saved to {self.report}", out)
+        self.assertIn("INCOMPLETE: matching stopped early.", text.split("YOUR SEARCH")[0])
+        self.assertIn("Only 0 of 1 request batches finished", text)
 
     def test_eof_at_first_prompt_exits_cleanly(self):
         out, code = self.run_flow()

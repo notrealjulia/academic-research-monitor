@@ -14,7 +14,7 @@ Each stage is a CLI command. Stages hand off **only** through CSV files in `data
 | 2 | `fetch_papers YYYY-MM-DD` | deterministic (arXiv API) | selected categories | `retrieved_papers.csv` |
 | 3 | `find_paper_matches "<interest>"` | LLM | retrieved papers | `paper_matches.csv` |
 
-`research_monitor` is an interactive layer over stages 1–3. It calls the same functions and writes the same files, only after the user accepts each stage. It takes dates as `dd-mm-yyyy` ranges and passes optional extra details to the matcher as a separate prompt section. Keep it thin: pipeline logic belongs in the stage modules, not in the flow.
+`research_monitor` is an interactive layer over stages 1–3. It calls the same functions and writes the same files, only after the user accepts each stage. It takes dates as `dd-mm-yyyy` ranges and passes optional extra details to the matcher as a separate prompt section. After matching, it writes `data/research_report.txt` from data it already holds, and deletes any older report when categories are accepted, so a report never outlives its results. Keep it thin: pipeline logic belongs in the stage modules, not in the flow.
 
 No database, cache, scheduler or UI. Don't add one without a demonstrated need.
 

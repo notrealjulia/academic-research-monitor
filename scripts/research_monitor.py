@@ -11,9 +11,14 @@ the previous stage:
   3. Fetch every paper first submitted in that range; save data/retrieved_papers.csv.
   4. Ask for optional extra details, kept separate from the original description.
   5. Show the number of OpenAI requests; match and save data/paper_matches.csv only if confirmed.
+  6. After matching, write a readable report to data/research_report.txt.
+
+A report from an earlier run is deleted as soon as this run starts replacing result
+files (when categories are accepted), so a stale report never sits next to new CSVs.
 """
 
 import sys
+import textwrap
 from datetime import date, datetime, time as dtime, timezone
 
 import fetch_papers as fp
@@ -23,8 +28,10 @@ import find_paper_matches as fm
 SELECTED = fp.SELECTED
 RETRIEVED = fp.RETRIEVED
 MATCHES = fm.OUT
+REPORT = fc.ROOT / "data" / "research_report.txt"
 
 DATE_FORMAT = "%d-%m-%Y"
+REPORT_WIDTH = 88
 
 
 def ask(prompt):
@@ -128,6 +135,68 @@ def describe_range(start, end):
             f"through {end:%d-%m-%Y} 23:59 UTC ({days} day{'s' if days != 1 else ''}, inclusive)")
 
 
+# --- Report ----------------------------------------------------------------
+
+def paragraph(text, indent="  "):
+    return textwrap.fill(text, REPORT_WIDTH, initial_indent=indent, subsequent_indent=indent)
+
+
+def submitted_utc(iso):
+    """'2026-09-24T18:13:26Z' -> '24-09-2026 18:13 UTC'."""
+    return datetime.strptime(iso, "%Y-%m-%dT%H:%M:%SZ").strftime("%d-%m-%Y %H:%M UTC")
+
+
+def build_report(interest, details, categories, start, end, papers, matches, done, batches, error, created):
+    """Plain-text report of one research_monitor run. Uses only data the run already has."""
+    rule = "=" * REPORT_WIDTH
+    lines = [
+        "RESEARCH MONITOR REPORT",
+        rule,
+        f"Created: {created:%d-%m-%Y %H:%M} UTC",
+        "",
+        paragraph(f"Papers were selected by an AI model ({fc.MODEL}) from each paper's title and abstract "
+                  "only. The full papers were not read. Check each paper yourself before relying on it.", ""),
+    ]
+    if error:
+        lines += ["", "INCOMPLETE: matching stopped early.",
+                  paragraph(f"Only {done} of {batches} request batches finished before this error: {error}. "
+                            "Papers in the unfinished batches were never checked, so relevant papers may be "
+                            "missing from this report.", "")]
+    lines += [
+        "", "YOUR SEARCH", rule,
+        "Research description:", paragraph(interest), "",
+        "Additional details:", paragraph(details) if details else "  (none)", "",
+        "arXiv categories (a paper counts if it is listed in any of them):",
+        *[f"  {c['code']:<18} {c['subject']} ({c['field']}{' > ' + c['subfield'] if c['subfield'] else ''})"
+          for c in categories],
+        "",
+        "Dates searched:", paragraph(describe_range(start, end)), "",
+        "RESULTS", rule,
+        f"Papers retrieved from arXiv: {len(papers)}",
+        f"Papers selected as matches:  {len(matches)}"
+        + (f" (from the {done} of {batches} batches that finished)" if error else ""),
+    ]
+    if not matches:
+        lines += ["", "No papers were selected as matches for your description."]
+    for i, p in enumerate(matches, 1):
+        lines += [
+            "", "-" * REPORT_WIDTH,
+            textwrap.fill(f"{i}. {p['title']}", REPORT_WIDTH, subsequent_indent="   "), "",
+            paragraph(f"Authors: {p['authors'].replace('; ', ', ')}"),
+            f"  First submitted: {submitted_utc(p['submitted'])}",
+            f"  arXiv: {p['url']}", "",
+            "  Why it was selected:", paragraph(p["match_reason"], "    "), "",
+            "  Abstract:", paragraph(p["abstract"], "    "),
+        ]
+    return "\n".join(lines) + "\n"
+
+
+def remove_old_report(path):
+    if path.exists():
+        path.unlink()
+        print(f"Removed the previous report ({path.name}), since this run replaces its results.")
+
+
 # --- Flow ------------------------------------------------------------------
 
 def run():
@@ -139,6 +208,7 @@ def run():
     fc.save(rows, interest, SELECTED)
     codes = [r["code"] for r in rows]
     print(f"Saved {len(rows)} categories to {SELECTED}")
+    remove_old_report(REPORT)
 
     print("\nStep 2 of 5: date range")
     today = datetime.now(timezone.utc).date()
@@ -164,12 +234,15 @@ def run():
     print(f"{len(papers)} papers to screen. Matching will send their titles and abstracts to {fc.MODEL} "
           f"in {batches} requests.")
     if not fm.confirm("Run matching? [y/N] "):
-        print(f"\nNo matching was run. The retrieved papers stay in {RETRIEVED}.")
+        print(f"\nNo matching was run, so no report was written. The retrieved papers stay in {RETRIEVED}.")
         print(f'To match them later: find_paper_matches "<your description>"')
         return
 
     matches, done, error = fm.match_papers(interest, papers, api_key, details)
     fm.report(matches, papers, done, batches, error, MATCHES)
+    REPORT.write_text(build_report(interest, details, rows, start, end, papers, matches, done, batches, error,
+                                   datetime.now(timezone.utc)), encoding="utf-8")
+    print(f"{'Incomplete report' if error else 'Report'} saved to {REPORT}")
 
 
 def main():

@@ -195,14 +195,24 @@ The program shows how many papers it will screen and how many requests it will s
 Run matching? [y/N]
 ```
 
-- **`y`:** the AI reads each paper's title and abstract and keeps the ones that fit your interests, each with a one-sentence reason. The matches are printed and saved to `data\paper_matches.csv`.
-- **Anything else, or just Enter:** nothing is sent to OpenAI. The downloaded papers stay in `data\retrieved_papers.csv`.
+- **`y`:** the AI reads each paper's title and abstract and keeps the ones that fit your interests, each with a one-sentence reason. The matches are printed and saved to `data\paper_matches.csv`. A readable report is also saved to `data\research_report.txt` (see [Your results](#your-results)).
+- **Anything else, or just Enter:** nothing is sent to OpenAI and no report is written. The downloaded papers stay in `data\retrieved_papers.csv`.
 
 ---
 
 ## Your results
 
-Results are saved as CSV files (simple spreadsheets) in the `data` folder inside the project folder. You can open them with Excel.
+Results are saved in the `data` folder inside the project folder.
+
+**Start with `research_report.txt`**, a plain-text report you can open in Notepad. It lists:
+- your research description and any extra details,
+- the categories and dates searched,
+- how many papers were downloaded and how many were selected,
+- for each selected paper: its title, authors, first submission date, arXiv link, the AI's reason, and the full abstract.
+
+It is written only when matching runs. If matching stops partway (for example, a connection error), the report still saves the papers checked so far, with **INCOMPLETE** at the top. When you accept categories at the start of a new run, any old report is deleted, so a report in the folder always belongs to the latest results.
+
+The other files are CSV files (simple spreadsheets) that you can open with Excel:
 
 | File | What it contains |
 |---|---|
@@ -216,7 +226,9 @@ To open the folder in File Explorer from PowerShell (inside the project folder):
 explorer data
 ```
 
-**Each new run replaces these files.** To keep results, copy the files somewhere else first.
+**Each new run replaces these files.** To keep results, copy them somewhere else first.
+
+The standalone `find_paper_matches` command (see [Advanced](#advanced-running-the-steps-separately)) doesn't write or update the report.
 
 If accented or non-English characters look garbled after double-clicking a file in Excel, open it through Excel's **Data → From Text/CSV** instead and choose UTF-8.
 
