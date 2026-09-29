@@ -35,9 +35,14 @@ REPORT_WIDTH = 88
 
 
 def ask(prompt):
-    """input() that treats Ctrl+Z/Ctrl+D (end of input) as exit."""
+    """input() that treats Ctrl+Z/Ctrl+D (end of input) as exit.
+
+    Removes byte-order marks (U+FEFF): PowerShell adds one when piping text into a
+    program, and pasted text can carry one. It is invisible but would otherwise be
+    saved and sent to the model as part of the answer.
+    """
     try:
-        return input(prompt).strip()
+        return input(prompt).replace("﻿", "").strip()
     except EOFError:
         leave()
 
@@ -137,8 +142,15 @@ def describe_range(start, end):
 
 # --- Report ----------------------------------------------------------------
 
+def wrap(text, first_indent, indent):
+    # Break only at spaces: never inside hyphenated words ("non-textual") or long words such as
+    # URLs. A word longer than the line is left whole, so that line runs past REPORT_WIDTH.
+    return textwrap.fill(text, REPORT_WIDTH, initial_indent=first_indent, subsequent_indent=indent,
+                         break_on_hyphens=False, break_long_words=False)
+
+
 def paragraph(text, indent="  "):
-    return textwrap.fill(text, REPORT_WIDTH, initial_indent=indent, subsequent_indent=indent)
+    return wrap(text, indent, indent)
 
 
 def submitted_utc(iso):
@@ -181,7 +193,7 @@ def build_report(interest, details, categories, start, end, papers, matches, don
     for i, p in enumerate(matches, 1):
         lines += [
             "", "-" * REPORT_WIDTH,
-            textwrap.fill(f"{i}. {p['title']}", REPORT_WIDTH, subsequent_indent="   "), "",
+            wrap(f"{i}. {p['title']}", "", "   "), "",
             paragraph(f"Authors: {p['authors'].replace('; ', ', ')}"),
             f"  First submitted: {submitted_utc(p['submitted'])}",
             f"  arXiv: {p['url']}", "",

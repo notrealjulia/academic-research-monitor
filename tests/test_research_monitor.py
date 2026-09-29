@@ -100,6 +100,18 @@ class BuildReportTest(unittest.TestCase):
         self.assertEqual(" ".join(abstract_part.split()), LONG_ABSTRACT)  # complete, only re-wrapped
         self.assertTrue(all(len(line) <= rm.REPORT_WIDTH for line in text.splitlines()))
 
+    def test_wraps_only_at_spaces(self):
+        hyphenated = " ".join(["non-textual", "state-of-the-art", "low-resource", "speech-to-text"] * 12)
+        url = "https://github.com/example-org/a-very-long-repository-name-that-does-not-fit/tree/main/src/data"
+        text = self.report(matches=[{**MATCH, "abstract": f"{hyphenated} Code: {url}",
+                                     "title": f"A long title about {hyphenated[:120]}"}])
+        lines = text.splitlines()
+        split = [line for line in lines if line.endswith("-") and set(line) != {"-"}]  # ignore separator lines
+        self.assertEqual(split, [])  # no word split at a hyphen
+        self.assertIn("    " + url, lines)  # the URL stays whole on its own line
+        for line in lines:  # only an unbreakable word may run past the width
+            self.assertTrue(len(line) <= rm.REPORT_WIDTH or " " not in line.strip(), line)
+
     def test_no_details_and_no_matches(self):
         text = self.report(matches=(), details="")
         self.assertIn("Additional details:\n  (none)", text)
@@ -301,6 +313,14 @@ class FlowTest(unittest.TestCase):
         self.assertIn(f"Incomplete report saved to {self.report}", out)
         self.assertIn("INCOMPLETE: matching stopped early.", text.split("YOUR SEARCH")[0])
         self.assertIn("Only 0 of 1 request batches finished", text)
+
+    def test_byte_order_mark_is_removed_from_answers(self):
+        # PowerShell prefixes piped input with U+FEFF; it must not reach the saved files or the model.
+        out, code = self.run_flow("﻿revised: MT", "a", "21-09-2026", "22-09-2026", "﻿Only evaluation.", "y")
+        self.assertEqual(self.rows(self.selected)[0]["interest"], "revised: MT")
+        [sent] = FakeOpenAI.inputs
+        self.assertNotIn("﻿", sent)
+        self.assertNotIn("﻿", self.report.read_text(encoding="utf-8"))
 
     def test_eof_at_first_prompt_exits_cleanly(self):
         out, code = self.run_flow()

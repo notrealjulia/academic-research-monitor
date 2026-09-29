@@ -45,7 +45,8 @@ def load_taxonomy(path=TAXONOMY):
 def load_api_key(env_file=ENV_FILE):
     key = os.environ.get("OPENAI_API_KEY", "").strip()
     if not key and env_file.exists():
-        for line in env_file.read_text(encoding="utf-8").splitlines():
+        # utf-8-sig also accepts files saved as "UTF-8 with BOM" (an option in Notepad).
+        for line in env_file.read_text(encoding="utf-8-sig").splitlines():
             name, sep, value = line.strip().partition("=")
             if sep and name.strip().removeprefix("export ").strip() == "OPENAI_API_KEY":
                 key = value.strip().strip("'\"")

@@ -283,8 +283,6 @@ The program found no key. Check that:
 - the file is named exactly `.env` (not `.env.txt`) and sits in the project folder. Run `notepad .env` from the project folder to open it;
 - the line reads `OPENAI_API_KEY=` followed directly by your key, on one line.
 
-If the file looks right but the error remains, Notepad may have saved it in a format with a hidden marker at the start. Open it with `notepad .env`, choose **File → Save as**, set **Encoding** to **UTF-8** (not "UTF-8 with BOM"), and save.
-
 The program uses a key set in your Windows environment variables named `OPENAI_API_KEY` *instead of* the one in `.env`. If you set one there in the past, it takes priority.
 
 **"Error: OpenAI rejected the API key. Check OPENAI_API_KEY in .env."**
