@@ -78,6 +78,6 @@ Look at real inputs and outputs first: the CSVs and a saved API response. Form a
 
 - Before editing: read the relevant code and run `git status`. After editing: run the tests, then check `git status` and `git diff`.
 - **Never commit or push unless the user explicitly asks.** Never rewrite git history without asking.
-- The README is for humans (usage, outputs); update it when commands or outputs change. This file holds architecture and conventions; update it when they change.
+- The README is for humans (usage, outputs); update it when commands or outputs change. Keep it short, for researchers who code a little. Put details in `docs/`: `troubleshooting.md` (errors), `advanced_usage.md` (single-step commands, files, settings) and `experiments.md` (the hybrid option, search and judge experiments). This file holds architecture and conventions; update it when they change.
 - Build the smallest thing that works. If you spot an architectural problem, report it rather than refactoring unasked.
 - The user is learning. When a non-obvious engineering decision comes up, explain the concept and the reason in a sentence or two.

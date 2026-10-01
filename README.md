@@ -1,38 +1,30 @@
 # Academic Research Monitor
 
-Academic Research Monitor helps you find new papers on [arXiv](https://arxiv.org) that match your research interests. You describe your interests in your own words. The program then:
+Academic Research Monitor finds new [arXiv](https://arxiv.org) papers that match your research interests. You describe your interests in your own words, and the program:
 
-1. suggests which arXiv subject categories to follow, for you to accept or revise,
+1. suggests arXiv categories to follow, for you to accept or revise,
 2. downloads every paper posted in those categories between two dates,
-3. asks an AI model which of those papers fit your description, and gives a short reason for each one.
+3. asks an AI model which papers fit your description, with a one-sentence reason for each.
 
-You use it by typing answers in a terminal window. No programming is needed. This guide assumes Windows.
+You answer its questions in a Windows PowerShell window.
 
-**What uses your OpenAI account.** Suggesting categories and matching papers both send requests to OpenAI with *your* API key, so they are billed to *your* OpenAI API account. Downloading papers from arXiv is free and does not use OpenAI. Before matching, the program tells you how many papers and requests it will send, and it only starts after you type `y`.
-
-**What the AI sees, and what it doesn't.** The matching step reads each paper's **title and abstract only**, never the full paper. Its reasons can be wrong: it may miss relevant papers or include irrelevant ones. Treat the results as suggestions and check each paper yourself. Your research description and the papers' titles and abstracts are sent to OpenAI.
+**Before you start:**
+- **Cost.** The AI steps use the OpenAI API and are billed to your own OpenAI API account. That is separate from ChatGPT: a ChatGPT subscription does not cover API use. Downloading from arXiv is free. Before matching, the program shows how many requests it will send and waits for you to type `y`.
+- **Privacy.** Your research description, and the titles and abstracts of downloaded papers, are sent to OpenAI.
+- **Limits.** The AI judges each paper from its **title and abstract only**, never the full text. It can miss relevant papers or include irrelevant ones, so check each result yourself.
 
 ---
 
-## Start here
+## Setup (once)
 
-Do steps 1–6 once. After that, see [Using it again later](#using-it-again-later).
+You need:
+- **Git:** <https://git-scm.com/download/win> (default options are fine)
+- **Python 3.12 or newer:** <https://www.python.org/downloads/>. On the installer's first screen, tick **"Add python.exe to PATH"**.
+- **An OpenAI API key with billing set up:** <https://platform.openai.com>
 
-### What you need beforehand
+Open **Windows PowerShell** (press the Windows key and type `PowerShell`). Paste each block with right-click or **Ctrl+V**, and press **Enter**.
 
-- **A Windows computer** with an internet connection.
-- **Git**, which downloads the project. Install it from <https://git-scm.com/download/win>; the default options are fine.
-- **Python 3.12 or newer.** Install it from <https://www.python.org/downloads/>. On the installer's first screen, tick **"Add python.exe to PATH"**.
-- **An OpenAI API key, with API billing set up.** Create the key on the OpenAI API platform at <https://platform.openai.com>. API use is billed separately from ChatGPT: **a ChatGPT subscription (Plus, Pro, etc.) does not include API usage.** Your API account needs a payment method or credit, or requests will fail.
-- **curl**, a small download tool built into Windows 10 and 11. The program uses it to contact arXiv. You'll check it's there in step 1.
-
-### 1. Open PowerShell and check your tools
-
-PowerShell is the Windows terminal. Press the **Windows key**, type `PowerShell`, and open **Windows PowerShell**. A window with a blinking cursor appears. You type (or paste) a command, then press **Enter**.
-
-To paste in PowerShell, right-click the window or press **Ctrl+V**.
-
-Check that each tool is installed:
+Check the tools. Each command should print a version; type `curl.exe` exactly, including `.exe`:
 
 ```powershell
 git --version
@@ -40,341 +32,90 @@ py --version
 curl.exe --version
 ```
 
-- **Git** should print something like `git version 2.…`.
-- **Python** should print `Python 3.12.…` or a higher number such as 3.13.
-- **curl** should print a few lines starting with `curl`. Type `curl.exe` exactly, including `.exe`: in PowerShell, plain `curl` runs a different command.
-
-If any check fails, see [Troubleshooting](#troubleshooting).
-
-### 2. Download your own copy of the project
-
-This downloads ("clones") a copy of the project into a new folder called `academic-research-monitor`, inside the folder PowerShell is currently in (normally `C:\Users\<your name>`). The copy is yours: nothing you do in it changes the original on GitHub.
+Download the project and go into its folder:
 
 ```powershell
 git clone https://github.com/notrealjulia/academic-research-monitor.git
 cd academic-research-monitor
 ```
 
-`cd` means "change directory": it moves PowerShell into the project folder. Run all remaining commands from inside this folder.
-
-### 3. Create and switch on a virtual environment
-
-A virtual environment is a private Python setup for this project, in a folder named `.venv`. It keeps the project's add-ons separate from anything else on your computer.
-
-Create it (only needed once):
+Create a virtual environment (a private Python setup for this project), switch it on, and install the program:
 
 ```powershell
 py -m venv .venv
-```
-
-Switch it on ("activate" it):
-
-```powershell
 .\.venv\Scripts\Activate.ps1
-```
-
-When activation works, the prompt starts with `(.venv)`, for example:
-
-```
-(.venv) PS C:\Users\YourName\academic-research-monitor>
-```
-
-If you see an error saying *running scripts is disabled on this system*, see [Troubleshooting](#troubleshooting).
-
-### 4. Install the program
-
-With `(.venv)` showing, run:
-
-```powershell
 pip install -e .
 ```
 
-The dot at the end matters: it means "this folder". The command downloads the one add-on the project needs (OpenAI's Python library) and makes the **`research_monitor`** command available in this virtual environment. It should finish with a line starting `Successfully installed`.
+The prompt should now start with `(.venv)`. If activation fails with *"running scripts is disabled on this system"*, see [Troubleshooting](docs/troubleshooting.md).
 
-The installation points to this folder, so don't move or rename the folder afterwards. If you do, run this step again from the new location.
-
-### 5. Add your OpenAI API key
-
-The program reads your key from a file named `.env` in the project folder. Make it from the template, then open it in Notepad:
+Add your API key. This creates a file named `.env` and opens it in Notepad:
 
 ```powershell
 Copy-Item .env.example .env
 notepad .env
 ```
 
-Notepad shows one line:
+Paste your key straight after the `=` (no spaces or quotes), so the line reads `OPENAI_API_KEY=sk-...`, then save and close. Keep the key private: anyone who has it can spend from your account. Git never uploads `.env`.
 
-```
-OPENAI_API_KEY=
-```
+---
 
-Paste your key directly after the `=`, with no spaces or quotation marks, so it looks like `OPENAI_API_KEY=sk-...`. Save (**Ctrl+S**) and close Notepad.
-
-Keep this key private. Anyone who has it can use your OpenAI account. Don't share it, email it or paste it anywhere else. The `.env` file is set up so Git never uploads it, so don't try to force it into a commit.
-
-### 6. Run it
+## Running it
 
 ```powershell
 research_monitor
 ```
 
-The program asks its questions one at a time, as described in the next section.
+Type each answer on a single line and press **Enter**. Press **Ctrl+C** to stop at any time.
 
----
+1. **Research interests.** Describe what you study and want to read about, including what you're *not* interested in. For example:
+   > I study machine translation for low-resource and regional European languages, such as Basque, Welsh or Sámi. I want new methods, datasets and evaluations, especially for dialects. I am not interested in speech recognition without translation.
 
-## What the program asks
+   The AI checks that the description is specific enough. It then suggests categories: type `a` to accept, `r` to revise your description, or `x` to exit.
+2. **Dates.** Enter a start and end date as day-month-year, e.g. `21-09-2026`, or press Enter for today. Both days count. The last day or two may be incomplete, because arXiv lists papers only once it has announced them.
+3. **Download.** Papers in your categories are downloaded from arXiv. This is free, but takes a moment for long date ranges.
+4. **Optional details.** Add anything that narrows the selection, e.g. *"only papers with new datasets"* or *"skip surveys"*. Press Enter to skip.
+5. **Matching.** Choose how the AI screens the papers:
+   - **`l`: screen every paper.** The AI reads the title and abstract of every downloaded paper. This is the most thorough option, and it costs the most on large downloads.
+   - **`h`: search first, then screen the top 10% (experimental).** A search step ranks all papers by how closely they match your description, and the AI reads only the top 10%. Accepted papers get a 0–100 score that orders them; it's the AI's judgment, not a probability. This option is cheaper and faster, but a relevant paper that search ranks low is never read. [How it works](docs/experiments.md#the-search-first-option-in-research_monitor).
 
-Answer each question and press **Enter**. To stop at any time, press **Ctrl+C**. At the category and date questions you can also type `x` to exit.
+   The program shows how many papers and requests it will send, then asks `Run matching? [y/N]`. Type `y` to start. Anything else stops without sending anything.
 
-> **Tip:** type or paste each answer as **a single line** and press Enter once. Don't type anything while the program is working (for example, while it downloads papers). Anything typed early, or a second pasted line, is taken as the answer to the *next* question.
-
-### Step 1 of 5: your research interests
-
-```
-Describe your research interests:
->
-```
-
-Write a few sentences about what you study and what you want to read about. Saying what you are *not* interested in also helps. For example (this is only an example; write your own):
-
-> *Example:* I study how communities adapt to climate-related flooding, including early-warning systems, risk communication and how households decide to evacuate. I want new work that evaluates these systems with real-world data. I am not interested in purely engineering designs of flood barriers.
-
-The program first asks the AI model whether your description is clear enough to search with (this uses your OpenAI account):
-- **Clear enough:** it continues.
-- **Too general** (for example just "AI"): it asks one follow-up question. You can then type a revised description or exit.
-- **Not a research request:** it explains what the tool is for and lets you try again or exit. This includes a description that also contains instructions to the program itself, such as "ignore your rules". Researching topics like prompt injection or cybersecurity is fine; just describe the research.
-
-It then asks the AI model to suggest arXiv categories. It then lists them with a short reason each, in this form:
-
-```
-1. <code>  <category name>  (<field>)
-   <reason>
-```
-
-Then it asks:
-
-```
-[a] Accept  [r] Revise description  [x] Exit
-```
-
-- **`a` (accept):** keeps these categories and moves on. They are saved to `data\selected_categories.csv`.
-- **`r` (revise):** shows your current description and lets you type a new one, then suggests categories again. Each attempt is a new request to OpenAI.
-- **`x` (exit):** stops without saving any categories.
-
-### Step 2 of 5: date range
-
-```
-Start date (dd-mm-yyyy, or x to exit):
-End date (dd-mm-yyyy, Enter for today …):
-```
-
-Type dates as **day-month-year with dashes**, e.g. `21-09-2026`. Press Enter without typing an end date to mean "up to today". Both dates are included. Dates count in UTC (universal time), and each paper counts by the date its first version was submitted.
-
-arXiv only lists papers once it has announced them, so the last day or two before today may not have appeared yet.
-
-### Step 3 of 5: downloading papers (no OpenAI use)
-
-The program downloads every paper in your accepted categories and dates from arXiv, including papers mainly filed under another category but cross-listed in yours. A progress bar shows how far it has got:
-
-```
-  [##############................]   500/1,069
-```
-
-arXiv asks programs to wait 3 seconds between requests, so large date ranges take a little while. When it finishes, it says how many papers it found and saves them to `data\retrieved_papers.csv`. If it finds none, it says so and stops.
-
-### Step 4 of 5: optional extra details
-
-The program shows your research description again and asks:
-
-```
-Optional: add details about which papers you want (Enter to skip):
-```
-
-You can add anything that narrows the search, such as *"only papers with field studies"* or *"skip review articles"*. The AI receives this alongside your original description; it doesn't replace it. Press Enter to skip, which makes no OpenAI request.
-
-If you type something, it's checked the same way as your description:
-- **Too vague** (for example "only the good ones"): you're asked to be more specific.
-- **Unrelated,** or containing instructions to the program: you're told what these details are for. Selection rules such as "exclude review papers" are fine.
-
-Either way, you can rewrite the details or skip them.
-
-### Step 5 of 5: matching (uses your OpenAI account)
-
-First choose a method:
-
-```
-[l] LLM screens every paper  [h] Hybrid search shortlist + LLM rerank (experimental)
-```
-
-- **`l` (the standard method):** the AI reads every downloaded paper.
-- **`h` (experimental):** a search step first ranks all papers against your description. It combines text embeddings (`text-embedding-3-small`), which find papers with similar meaning, with keyword ranking (BM25), which finds papers that use the same words. For the keyword ranking, the AI first picks search terms from your description and details, leaving out anything you said you're not interested in. This costs one small extra request. The terms are printed, and they're listed in the report and saved in `data\paper_matches_settings.json`. The embeddings still use your full description. If the AI returns no usable terms, the run stops with an error before anything else is sent, and your previous matches file is left unchanged. Rewording the description usually helps. Only the top 10% of downloaded papers, rounded up, go to the AI: for example 42 of 411 papers, or 220 of 2,197. The number is shown before you confirm, and it's recorded in the report and in `data\paper_matches_settings.json`. The AI accepts or rejects each one and gives accepted papers a relevance score from 0 to 100, which sets their order. The score is the AI's judgment of fit, not a probability. Papers outside the shortlist are never read by the AI, so a relevant paper that search ranked lower can be missed. On a small download that's only a few papers. The embeddings are saved in `data\paper_embeddings.json` and reused, so repeat runs on the same papers cost almost nothing extra.
-
-The program then shows how many papers it will screen and how many requests it will send to OpenAI, and asks:
-
-```
-Run matching? [y/N]
-```
-
-- **`y`:** the AI reads each paper's title and abstract and keeps the ones that fit your interests, each with a one-sentence reason. The matches are printed and saved to `data\paper_matches.csv`. A readable report is also saved to `data\research_report.txt` (see [Your results](#your-results)).
-- **Anything else, or just Enter:** nothing is sent to OpenAI and no report is written. The downloaded papers stay in `data\retrieved_papers.csv`.
-
-At the end, the program prints how long each stage took: input checks, category selection, arXiv download, and matching. Time spent waiting for your answers isn't counted. For the hybrid method, the summary also shows how many papers were embedded new and how many came from saved embeddings, plus the number of retries and the total time spent waiting before them. These figures are also saved in `data\paper_matches_settings.json`.
+At the end it lists the matches and prints how long each stage took.
 
 ---
 
 ## Your results
 
-Results are saved in the `data` folder inside the project folder.
-
-**Start with `research_report.txt`**, a plain-text report you can open in Notepad. It lists:
-- your research description and any extra details,
-- the categories and dates searched,
-- how many papers were downloaded and how many were selected,
-- for each selected paper: its title, authors, first submission date, arXiv link, the AI's reason, and the full abstract.
-
-It is written only when matching runs. If matching stops partway (for example, a connection error), the report still saves the papers checked so far, with **INCOMPLETE** at the top. When you accept categories at the start of a new run, any old report is deleted, so a report in the folder always belongs to the latest results.
-
-The other files are CSV files (simple spreadsheets) that you can open with Excel:
-
-| File | What it contains |
-|---|---|
-| `selected_categories.csv` | The categories you accepted. Each row has the category code, its field and name, the reason it was suggested, and your research description. |
-| `retrieved_papers.csv` | Every paper downloaded for your categories and dates. Each row has the arXiv ID, title, abstract, authors, submission date and time, categories, and links to the arXiv page and the PDF. |
-| `paper_matches.csv` | The papers the AI judged relevant: the same columns as above plus `match_reason`, the AI's one-sentence reason. With the hybrid method, there's also a `relevance_score` column (0–100) and papers are listed best score first. |
-| `paper_matches_settings.json` | Hybrid method only: the models, shortlist size, request counts, token use and timing of the run that produced `paper_matches.csv`. It is deleted when a standard run replaces the matches. |
-
-To open the folder in File Explorer from PowerShell (inside the project folder):
+Results are saved in the `data` folder. To open it:
 
 ```powershell
 explorer data
 ```
 
-**Each new run replaces these files.** To keep results, copy them somewhere else first.
+- **`research_report.txt`:** start here. It includes your search, the categories and dates, and every selected paper with its reason, link and abstract. It's written only when matching runs. If matching stopped partway, it says **INCOMPLETE** at the top.
+- **`paper_matches.csv`:** the selected papers, as a spreadsheet.
+- **`retrieved_papers.csv`:** every downloaded paper.
+- **`selected_categories.csv`:** the categories you accepted.
 
-The standalone `find_paper_matches` and `rerank_papers` commands (see [Advanced](#advanced-running-the-steps-separately)) don't write or update the report.
-
-If accented or non-English characters look garbled after double-clicking a file in Excel, open it through Excel's **Data → From Text/CSV** instead and choose UTF-8.
-
----
-
-## Using it again later
-
-You don't need to download, install or add your key again. Each time:
-
-1. Open PowerShell.
-2. Go to the project folder. If you cloned it in the default place:
-
-   ```powershell
-   cd academic-research-monitor
-   ```
-
-3. Switch on the virtual environment:
-
-   ```powershell
-   .\.venv\Scripts\Activate.ps1
-   ```
-
-4. Run the program:
-
-   ```powershell
-   research_monitor
-   ```
+**Each run replaces these files.** Copy them elsewhere if you want to keep them.
 
 ---
 
-## Troubleshooting
+## Next time
 
-**"py" or "python" is not recognized, or typing `python` opens the Microsoft Store.**
-Python isn't installed, or Windows can't find it. Install Python from <https://www.python.org/downloads/> and tick **"Add python.exe to PATH"** on the first screen. Then close PowerShell, open a new window, and check `py --version`. If `py` still isn't found but `python --version` works, use `python` wherever this guide says `py`.
-
-**"running scripts is disabled on this system" when activating.**
-Windows blocks activation scripts by default. Allow them for your user account once, answer `Y` if asked, then activate again:
+Open PowerShell, then:
 
 ```powershell
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+cd academic-research-monitor
 .\.venv\Scripts\Activate.ps1
+research_monitor
 ```
-
-**The virtual environment isn't activated (no `(.venv)` at the start of the prompt).**
-Every new PowerShell window starts without it. Go to the project folder and run `.\.venv\Scripts\Activate.ps1`. If PowerShell says the path doesn't exist, you're either in the wrong folder (use `cd academic-research-monitor`) or haven't done [step 3](#3-create-and-switch-on-a-virtual-environment) yet.
-
-**"research_monitor is not recognized as the name of a cmdlet…"**
-Either the virtual environment isn't activated (check for `(.venv)`, see above), or the program isn't installed yet. With `(.venv)` showing, run `pip install -e .` from the project folder, as in [step 4](#4-install-the-program).
-
-**"Error: OPENAI_API_KEY is not set. Add a line OPENAI_API_KEY=... to …\.env"**
-The program found no key. Check that:
-- the file is named exactly `.env` (not `.env.txt`) and sits in the project folder. Run `notepad .env` from the project folder to open it;
-- the line reads `OPENAI_API_KEY=` followed directly by your key, on one line.
-
-The program uses a key set in your Windows environment variables named `OPENAI_API_KEY` *instead of* the one in `.env`. If you set one there in the past, it takes priority.
-
-**"Error: OpenAI rejected the API key. Check OPENAI_API_KEY in .env."**
-The key is wrong, incomplete or has been revoked. Create a new key on <https://platform.openai.com>, paste it into `.env` again, and save.
-
-**"Error: OpenAI rate limit or quota exceeded: …"**
-Usually your OpenAI API account has no billing set up or has run out of credit. Remember that a ChatGPT subscription doesn't cover API use. Check billing on <https://platform.openai.com>. If it's a short-term rate limit, wait a minute and try again.
-
-**"Error: curl was not found…" or `curl.exe --version` fails.**
-curl is included with Windows 10 (since 2018) and Windows 11. If it's missing, install it from <https://curl.se/windows/>, then open a new PowerShell window and check `curl.exe --version`.
-
-**"No papers were found for these categories and dates…"**
-- Try a wider date range.
-- Leave out the last day or two: arXiv hasn't announced the newest papers yet.
-- Check the dates are day-month-year (`21-09-2026`, not `09-21-2026`).
-- Consider revising your description so that different categories are suggested.
-
-**Something else went wrong mid-run.**
-Press **Ctrl+C** to stop, then start again with `research_monitor`. Files from finished steps stay in the `data` folder until the next run replaces them.
 
 ---
 
-## Advanced: running the steps separately
+## More help
 
-`research_monitor` runs three smaller commands in sequence. You can also run them one at a time, with the virtual environment activated. Each reads the previous one's file from `data`.
-
-| Command | What it does | Uses OpenAI? |
-|---|---|---|
-| `find_categories "<your description>"` | Suggests categories and saves them to `data\selected_categories.csv` (no accept/revise step). | yes |
-| `fetch_papers YYYY-MM-DD` | Downloads papers in the saved categories for **one** day (note the year-month-day format here) to `data\retrieved_papers.csv`. | no |
-| `find_paper_matches "<your description>"` | Matches the saved papers against a description, after showing a few sample papers and asking `Proceed? [y/N]`. Saves `data\paper_matches.csv`. It warns you if the description differs from the one used to choose the categories. | yes |
-| `rerank_papers "<your description>"` | The experimental hybrid method on the saved papers: search shortlist, then AI reranking. Asks `Proceed? [y/N]` first and saves `data\paper_matches.csv` and `data\paper_matches_settings.json`. The shortlist size is `SHORTLIST_PERCENT` (10, as a percentage of downloaded papers, rounded up) at the top of `scripts\rerank_papers.py`. | yes |
-
-For example, to try a different description on papers you've already downloaded, without contacting arXiv again:
-
-```powershell
-find_paper_matches "I study early-warning systems for floods and how people respond to them."
-```
-
-Other project tasks:
-
-```powershell
-python scripts/extract_arxiv_taxonomy.py   # rebuild data/arxiv_taxonomy.csv from arXiv's category page
-python -m unittest                         # run the automated tests (no OpenAI or arXiv requests)
-```
-
-### Experiment: embedding and hybrid search
-
-`python scripts/search_experiment.py` ranks the saved papers two other ways and compares them with the AI matches in `data\paper_matches.csv`:
-
-- **Embedding search:** `text-embedding-3-small` turns each title and abstract, and your saved description, into vectors. Papers are ranked by cosine similarity.
-- **Hybrid search:** combines that ranking with BM25 keyword ranking, using reciprocal rank fusion.
-
-The first run embeds all papers (about $0.01 for 850 papers) and asks `Proceed? [y/N]` first. The embeddings are saved, so later runs with another description reuse them: `python scripts/search_experiment.py "another description"`.
-
-It never changes the main files. On the first run it copies them to `data\experiments\search\inputs\` and from then on reads only those copies. It writes `embedding_ranking.csv`, `hybrid_ranking.csv` and `run_info.json` (settings and input checksums) to `data\experiments\search\`, overwriting them on each run. The AI matches are a comparison point, not a correct answer key.
-
-`python scripts/judge_experiment.py` then asks a stronger model (`gpt-6-astra`) to rate a pool of papers: all the AI matches plus the top 20 from each search method. It rates each paper separately as relevant, partly relevant or irrelevant, and backs each rating with a quote from the abstract, which the program checks. It shows the estimated cost and asks `Proceed? [y/N]` first. Results go to `data\experiments\judge\`. The ratings are a second opinion, not the truth, and only the pool is rated.
-
----
-
-## Reference: arXiv category list
-
-`data/arxiv_taxonomy.csv` holds arXiv's category list (155 categories across 8 fields). The program uses it to check the AI's category suggestions.
-
-| Column        | Meaning |
-|---------------|---------|
-| `field`       | Top-level group, e.g. `Computer Science`, `Physics` |
-| `subfield`    | What arXiv calls an "archive", e.g. `Astrophysics`. Only Physics has these; the column is blank elsewhere. |
-| `subject`     | Category name, e.g. `Artificial Intelligence` |
-| `code`        | arXiv category code, e.g. `cs.AI` |
-| `description` | arXiv's description of the category |
+- [Troubleshooting](docs/troubleshooting.md): installation problems, error messages, no papers found
+- [Advanced usage](docs/advanced_usage.md): running single steps, file contents, settings
+- [Experiments](docs/experiments.md): how the search-first option works, and the search and judge experiments
