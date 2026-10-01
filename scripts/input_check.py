@@ -9,7 +9,7 @@ quality; it is not a security guarantee.
 import json
 from typing import Literal
 
-from find_categories import MODEL, SetupError
+from find_categories import MODEL, SetupError, openai_errors
 
 # Shared by both checks. Mixed input is rejected as a whole rather than cleaned, so no part of an
 # instruction aimed at the program reaches the later category and matching prompts.
@@ -45,7 +45,7 @@ def check(instructions, payload, api_key):
         question: str
 
     client = openai.OpenAI(api_key=api_key)
-    try:
+    with openai_errors():
         response = client.responses.parse(
             model=MODEL,
             reasoning={"effort": "low"},
@@ -53,14 +53,6 @@ def check(instructions, payload, api_key):
             input=json.dumps(payload, ensure_ascii=False),
             text_format=Check,
         )
-    except openai.AuthenticationError:
-        raise SetupError("OpenAI rejected the API key. Check OPENAI_API_KEY in .env.")
-    except openai.RateLimitError as e:
-        raise SetupError(f"OpenAI rate limit or quota exceeded: {e.message}")
-    except openai.APIConnectionError:
-        raise SetupError("Could not reach the OpenAI API. Check your internet connection.")
-    except openai.APIStatusError as e:
-        raise SetupError(f"OpenAI API error {e.status_code}: {e.message}")
     if response.output_parsed is None:
         raise SetupError("The model returned no usable answer when checking your input.")
     result = response.output_parsed

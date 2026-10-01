@@ -26,10 +26,6 @@ URL = "https://arxiv.org/category_taxonomy"
 OUT = Path(__file__).resolve().parent.parent / "data" / "arxiv_taxonomy.csv"
 
 
-def clean(text):
-    return re.sub(r"\s+", " ", text).strip()
-
-
 class TaxonomyParser(HTMLParser):
     def __init__(self):
         super().__init__()
@@ -59,7 +55,7 @@ class TaxonomyParser(HTMLParser):
             return
         if tag != self.capture:
             return
-        text = clean("".join(self.buf))
+        text = " ".join("".join(self.buf).split())  # collapse whitespace
         self.capture = None
         if tag == "h2":
             self.field, self.subfield = text, ""

@@ -200,7 +200,16 @@ Either way, you can rewrite the details or skip them.
 
 ### Step 5 of 5: matching (uses your OpenAI account)
 
-The program shows how many papers it will screen and how many requests it will send to OpenAI, then asks:
+First choose a method:
+
+```
+[l] LLM screens every paper  [h] Hybrid search shortlist + LLM rerank (experimental)
+```
+
+- **`l` (the standard method):** the AI reads every downloaded paper.
+- **`h` (experimental):** a search step first ranks all papers against your description. It combines text embeddings (`text-embedding-3-small`), which find papers with similar meaning, with keyword ranking (BM25), which finds papers that use the same words. For the keyword ranking, the AI first picks search terms from your description and details, leaving out anything you said you're not interested in. This costs one small extra request. The terms are printed, and they're listed in the report and saved in `data\paper_matches_settings.json`. The embeddings still use your full description. If the AI returns no usable terms, the run stops with an error before anything else is sent, and your previous matches file is left unchanged. Rewording the description usually helps. Only the top 10% of downloaded papers, rounded up, go to the AI: for example 42 of 411 papers, or 220 of 2,197. The number is shown before you confirm, and it's recorded in the report and in `data\paper_matches_settings.json`. The AI accepts or rejects each one and gives accepted papers a relevance score from 0 to 100, which sets their order. The score is the AI's judgment of fit, not a probability. Papers outside the shortlist are never read by the AI, so a relevant paper that search ranked lower can be missed. On a small download that's only a few papers. The embeddings are saved in `data\paper_embeddings.json` and reused, so repeat runs on the same papers cost almost nothing extra.
+
+The program then shows how many papers it will screen and how many requests it will send to OpenAI, and asks:
 
 ```
 Run matching? [y/N]
@@ -208,6 +217,8 @@ Run matching? [y/N]
 
 - **`y`:** the AI reads each paper's title and abstract and keeps the ones that fit your interests, each with a one-sentence reason. The matches are printed and saved to `data\paper_matches.csv`. A readable report is also saved to `data\research_report.txt` (see [Your results](#your-results)).
 - **Anything else, or just Enter:** nothing is sent to OpenAI and no report is written. The downloaded papers stay in `data\retrieved_papers.csv`.
+
+At the end, the program prints how long each stage took: input checks, category selection, arXiv download, and matching. Time spent waiting for your answers isn't counted. For the hybrid method, the summary also shows how many papers were embedded new and how many came from saved embeddings, plus the number of retries and the total time spent waiting before them. These figures are also saved in `data\paper_matches_settings.json`.
 
 ---
 
@@ -229,7 +240,8 @@ The other files are CSV files (simple spreadsheets) that you can open with Excel
 |---|---|
 | `selected_categories.csv` | The categories you accepted. Each row has the category code, its field and name, the reason it was suggested, and your research description. |
 | `retrieved_papers.csv` | Every paper downloaded for your categories and dates. Each row has the arXiv ID, title, abstract, authors, submission date and time, categories, and links to the arXiv page and the PDF. |
-| `paper_matches.csv` | The papers the AI judged relevant: the same columns as above plus `match_reason`, the AI's one-sentence reason. |
+| `paper_matches.csv` | The papers the AI judged relevant: the same columns as above plus `match_reason`, the AI's one-sentence reason. With the hybrid method, there's also a `relevance_score` column (0–100) and papers are listed best score first. |
+| `paper_matches_settings.json` | Hybrid method only: the models, shortlist size, request counts, token use and timing of the run that produced `paper_matches.csv`. It is deleted when a standard run replaces the matches. |
 
 To open the folder in File Explorer from PowerShell (inside the project folder):
 
@@ -239,7 +251,7 @@ explorer data
 
 **Each new run replaces these files.** To keep results, copy them somewhere else first.
 
-The standalone `find_paper_matches` command (see [Advanced](#advanced-running-the-steps-separately)) doesn't write or update the report.
+The standalone `find_paper_matches` and `rerank_papers` commands (see [Advanced](#advanced-running-the-steps-separately)) don't write or update the report.
 
 If accented or non-English characters look garbled after double-clicking a file in Excel, open it through Excel's **Data → From Text/CSV** instead and choose UTF-8.
 
@@ -325,6 +337,7 @@ Press **Ctrl+C** to stop, then start again with `research_monitor`. Files from f
 | `find_categories "<your description>"` | Suggests categories and saves them to `data\selected_categories.csv` (no accept/revise step). | yes |
 | `fetch_papers YYYY-MM-DD` | Downloads papers in the saved categories for **one** day (note the year-month-day format here) to `data\retrieved_papers.csv`. | no |
 | `find_paper_matches "<your description>"` | Matches the saved papers against a description, after showing a few sample papers and asking `Proceed? [y/N]`. Saves `data\paper_matches.csv`. It warns you if the description differs from the one used to choose the categories. | yes |
+| `rerank_papers "<your description>"` | The experimental hybrid method on the saved papers: search shortlist, then AI reranking. Asks `Proceed? [y/N]` first and saves `data\paper_matches.csv` and `data\paper_matches_settings.json`. The shortlist size is `SHORTLIST_PERCENT` (10, as a percentage of downloaded papers, rounded up) at the top of `scripts\rerank_papers.py`. | yes |
 
 For example, to try a different description on papers you've already downloaded, without contacting arXiv again:
 
@@ -338,6 +351,19 @@ Other project tasks:
 python scripts/extract_arxiv_taxonomy.py   # rebuild data/arxiv_taxonomy.csv from arXiv's category page
 python -m unittest                         # run the automated tests (no OpenAI or arXiv requests)
 ```
+
+### Experiment: embedding and hybrid search
+
+`python scripts/search_experiment.py` ranks the saved papers two other ways and compares them with the AI matches in `data\paper_matches.csv`:
+
+- **Embedding search:** `text-embedding-3-small` turns each title and abstract, and your saved description, into vectors. Papers are ranked by cosine similarity.
+- **Hybrid search:** combines that ranking with BM25 keyword ranking, using reciprocal rank fusion.
+
+The first run embeds all papers (about $0.01 for 850 papers) and asks `Proceed? [y/N]` first. The embeddings are saved, so later runs with another description reuse them: `python scripts/search_experiment.py "another description"`.
+
+It never changes the main files. On the first run it copies them to `data\experiments\search\inputs\` and from then on reads only those copies. It writes `embedding_ranking.csv`, `hybrid_ranking.csv` and `run_info.json` (settings and input checksums) to `data\experiments\search\`, overwriting them on each run. The AI matches are a comparison point, not a correct answer key.
+
+`python scripts/judge_experiment.py` then asks a stronger model (`gpt-6-astra`) to rate a pool of papers: all the AI matches plus the top 20 from each search method. It rates each paper separately as relevant, partly relevant or irrelevant, and backs each rating with a quote from the abstract, which the program checks. It shows the estimated cost and asks `Proceed? [y/N]` first. Results go to `data\experiments\judge\`. The ratings are a second opinion, not the truth, and only the pool is rated.
 
 ---
 

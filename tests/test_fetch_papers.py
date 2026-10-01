@@ -168,7 +168,7 @@ class MainOutputTest(unittest.TestCase):
         tmp = Path(tempfile.mkdtemp()) / "retrieved.csv"
         arxiv = FakeArxiv([entry("2609.00001", "2026-09-21T01:00:00Z"), entry("2609.00002", "2026-09-21T02:00:00Z")])
         save = fp.save_papers
-        with mock.patch("fetch_papers.fetch_page", arxiv), mock.patch("fetch_papers.load_codes", lambda: (["cs.CL"], [])), \
+        with mock.patch("fetch_papers.fetch_page", arxiv), mock.patch("fetch_papers.load_codes", lambda: ["cs.CL"]), \
                 mock.patch("fetch_papers.save_papers", lambda papers: save(papers, tmp)), \
                 mock.patch("sys.argv", ["fetch_papers", "2026-09-21"]), contextlib.redirect_stdout(io.StringIO()) as out:
             fp.main()

@@ -10,6 +10,7 @@ dependencies = [
 find_categories = "find_categories:main"
 fetch_papers = "fetch_papers:main"
 find_paper_matches = "find_paper_matches:main"
+rerank_papers = "rerank_papers:main"
 research_monitor = "research_monitor:main"
 
 [build-system]
@@ -18,4 +19,4 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 package-dir = { "" = "scripts" }
-py-modules = ["find_categories", "fetch_papers", "find_paper_matches", "input_check", "research_monitor"]
+py-modules = ["find_categories", "fetch_papers", "find_paper_matches", "rerank_papers", "input_check", "research_monitor", "search_experiment", "judge_experiment"]

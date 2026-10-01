@@ -12,7 +12,9 @@ the previous stage:
   3. Fetch every paper first submitted in that range; save data/retrieved_papers.csv.
   4. Ask for optional extra details (checked by input_check unless empty), kept separate
      from the original description.
-  5. Show the number of OpenAI requests; match and save data/paper_matches.csv only if confirmed.
+  5. Choose a matching method: LLM-only (the model screens every paper) or the experimental
+     hybrid path (search shortlist, then LLM reranking; see rerank_papers). Show the number
+     of OpenAI requests; match and save data/paper_matches.csv only if confirmed.
   6. After matching, write a readable report to data/research_report.txt.
 
 A report from an earlier run is deleted as soon as this run starts replacing result
@@ -21,20 +23,50 @@ files (when categories are accepted), so a stale report never sits next to new C
 
 import sys
 import textwrap
-from datetime import date, datetime, time as dtime, timezone
+import time
+from contextlib import contextmanager
+from datetime import datetime, time as dtime, timezone
 
 import fetch_papers as fp
 import find_categories as fc
 import find_paper_matches as fm
 import input_check as ic
+import rerank_papers as rr
 
 SELECTED = fp.SELECTED
 RETRIEVED = fp.RETRIEVED
 MATCHES = fm.OUT
+EMBEDDINGS = rr.EMBEDDINGS
 REPORT = fc.ROOT / "data" / "research_report.txt"
 
 DATE_FORMAT = "%d-%m-%Y"
 REPORT_WIDTH = 88
+
+# Elapsed seconds per stage of the current run, and a short note per stage. Only work the program does
+# is timed (model, arXiv and local computation), never time spent waiting for the user's answers.
+TIMINGS = {}
+TIMING_NOTES = {}
+STAGES = ["input checks", "category selection", "arXiv fetch", "embedding cache check", "keyword extraction",
+          "embedding", "local ranking", "LLM screening"]
+
+
+@contextmanager
+def timed(stage):
+    """Add the block's elapsed time to TIMINGS[stage]; repeated blocks (e.g. revised input) add up."""
+    start = time.perf_counter()
+    try:
+        yield
+    finally:
+        TIMINGS[stage] = TIMINGS.get(stage, 0.0) + time.perf_counter() - start
+
+
+def timing_summary(timings, notes):
+    lines = ["Time taken (excluding time spent waiting for your answers):"]
+    for stage in STAGES:
+        if stage in timings:
+            note = f"  ({notes[stage]})" if stage in notes else ""
+            lines.append(f"  {stage:<22}{timings[stage]:>7.1f} s{note}")
+    return "\n".join(lines)
 
 
 def ask(prompt):
@@ -87,7 +119,8 @@ def checked_description(text, api_key):
     """Check a description until it is usable. Returns the accepted text; exits if the user chooses to."""
     while True:
         print("\nChecking your description...")
-        verdict, question = ic.check_description(text, api_key)
+        with timed("input checks"):
+            verdict, question = ic.check_description(text, api_key)
         if verdict == "usable":
             return text
         if verdict == "needs_detail":
@@ -110,7 +143,8 @@ def ask_details(interest, api_key):
         if not details:
             return ""
         print("\nChecking your details...")
-        verdict, question = ic.check_details(details, interest, api_key)
+        with timed("input checks"):
+            verdict, question = ic.check_details(details, interest, api_key)
         if verdict == "usable":
             return details
         if verdict == "needs_detail":
@@ -131,7 +165,8 @@ def choose_categories(taxonomy, api_key):
     interest = checked_description(ask_description("Describe your research interests:\n> "), api_key)
     while True:
         print(f"\nAsking {fc.MODEL} to match your description against {len(taxonomy)} arXiv categories...\n")
-        rows, rejected = fc.validate(fc.ask_model(interest, taxonomy, api_key), taxonomy)
+        with timed("category selection"):
+            rows, rejected = fc.validate(fc.ask_model(interest, taxonomy, api_key), taxonomy)
         if rows:
             fc.print_results(rows, rejected)
         else:
@@ -222,16 +257,26 @@ def submitted_utc(iso):
     return datetime.strptime(iso, "%Y-%m-%dT%H:%M:%SZ").strftime("%d-%m-%Y %H:%M UTC")
 
 
-def build_report(interest, details, categories, start, end, papers, matches, done, batches, error, created):
-    """Plain-text report of one research_monitor run. Uses only data the run already has."""
+def build_report(interest, details, categories, start, end, papers, matches, done, batches, error, created,
+                 shortlisted=None, keywords=None, shortlist_percent=None):
+    """Plain-text report of one research_monitor run. Uses only data the run already has.
+
+    `shortlisted`, `keywords` and `shortlist_percent` are set only for the hybrid path: the number of papers
+    search passed to the model, the AI-chosen keyword search terms, and the percentage the shortlist was cut at.
+    """
     rule = "=" * REPORT_WIDTH
+    how = (f"Papers were selected by an AI model ({fc.MODEL}) from each paper's title and abstract only."
+           if shortlisted is None else
+           f"Experimental method: hybrid search (text embeddings plus keyword ranking) shortlisted the top "
+           f"{shortlist_percent}% of papers ({shortlisted}), then an AI model ({fc.MODEL}) accepted or rejected each one from its title and abstract "
+           "only. Papers outside the shortlist were never shown to the model. Relevance scores are the model's "
+           "0-100 judgments, used only for ordering; they are not probabilities.")
     lines = [
         "RESEARCH MONITOR REPORT",
         rule,
         f"Created: {created:%d-%m-%Y %H:%M} UTC",
         "",
-        paragraph(f"Papers were selected by an AI model ({fc.MODEL}) from each paper's title and abstract "
-                  "only. The full papers were not read. Check each paper yourself before relying on it.", ""),
+        paragraph(f"{how} The full papers were not read. Check each paper yourself before relying on it.", ""),
     ]
     if error:
         lines += ["", "INCOMPLETE: matching stopped early.",
@@ -243,12 +288,15 @@ def build_report(interest, details, categories, start, end, papers, matches, don
         "Research description:", paragraph(interest), "",
         "Additional details:", paragraph(details) if details else "  (none)", "",
         "arXiv categories (a paper counts if it is listed in any of them):",
-        *[f"  {c['code']:<18} {c['subject']} ({c['field']}{' > ' + c['subfield'] if c['subfield'] else ''})"
-          for c in categories],
+        *[f"  {c['code']:<18} {c['subject']} ({fc.group(c)})" for c in categories],
         "",
         "Dates searched:", paragraph(describe_range(start, end)), "",
         "RESULTS", rule,
         f"Papers retrieved from arXiv: {len(papers)}",
+        *([f"Papers shortlisted by search: {shortlisted} (top {shortlist_percent}% of {len(papers)}, rounded up)"]
+          if shortlisted is not None else []),
+        *([paragraph(f"Keyword search terms (chosen by the AI): {', '.join(keywords)}", "")]
+          if keywords is not None else []),
         f"Papers selected as matches:  {len(matches)}"
         + (f" (from the {done} of {batches} batches that finished)" if error else ""),
     ]
@@ -260,7 +308,8 @@ def build_report(interest, details, categories, start, end, papers, matches, don
             wrap(f"{i}. {p['title']}", "", "   "), "",
             paragraph(f"Authors: {p['authors'].replace('; ', ', ')}"),
             f"  First submitted: {submitted_utc(p['submitted'])}",
-            f"  arXiv: {p['url']}", "",
+            f"  arXiv: {p['url']}",
+            *([f"  Model relevance score: {p['relevance_score']}/100"] if "relevance_score" in p else []), "",
             "  Why it was selected:", paragraph(p["match_reason"], "    "), "",
             "  Abstract:", paragraph(p["abstract"], "    "),
         ]
@@ -276,6 +325,8 @@ def remove_old_report(path):
 # --- Flow ------------------------------------------------------------------
 
 def run():
+    TIMINGS.clear()
+    TIMING_NOTES.clear()
     taxonomy = fc.load_taxonomy()
     api_key = fc.load_api_key()
 
@@ -294,7 +345,9 @@ def run():
         print("Note: arXiv only returns announced papers, so the most recent days may be incomplete.")
 
     print(f"\nStep 3 of 5: fetching papers in {', '.join(codes)} (primary or cross-listed)")
-    papers, total = fp.fetch_papers(codes, *utc_window(start, end))
+    with timed("arXiv fetch"):
+        papers, total = fp.fetch_papers(codes, *utc_window(start, end))
+    TIMING_NOTES["arXiv fetch"] = f"{len(papers):,} papers"
     fp.save_papers(papers, RETRIEVED)
     print(f"\nRetrieved {len(papers):,} unique papers (arXiv reported {total:,}). Saved to {RETRIEVED}")
     if not papers:
@@ -306,19 +359,52 @@ def run():
     details = ask_details(interest, api_key)
 
     print("\nStep 5 of 5: matching")
-    batches = fm.request_count(papers)
-    print(f"{len(papers)} papers to screen. Matching will send their titles and abstracts to {fc.MODEL} "
-          f"in {batches} requests.")
+    method = choose({"l": "LLM screens every paper", "h": "Hybrid search shortlist + LLM rerank (experimental)"})
+    if method == "l":
+        batches = fm.request_count(papers)
+        print(f"{len(papers)} papers to screen. Matching will send their titles and abstracts to {fc.MODEL} "
+              f"in {batches} requests.")
+    else:
+        with timed("embedding cache check"):
+            plan = rr.describe_plan(papers, interest, details, EMBEDDINGS)
+        print(plan)
     if not fm.confirm("Run matching? [y/N] "):
         print(f"\nNo matching was run, so no report was written. The retrieved papers stay in {RETRIEVED}.")
-        print(f'To match them later: find_paper_matches "<your description>"')
+        print(f'To match them later: find_paper_matches "<your description>" '
+              f'(or rerank_papers "<your description>" for the hybrid path)')
+        print("\n" + timing_summary(TIMINGS, TIMING_NOTES))
         return
 
-    matches, done, error = fm.match_papers(interest, papers, api_key, details)
-    fm.report(matches, papers, done, batches, error, MATCHES)
+    shortlisted, keywords, shortlist_percent = None, None, None
+    if method == "l":
+        with timed("LLM screening"):
+            matches, done, error = fm.match_papers(interest, papers, api_key, details)
+        TIMING_NOTES["LLM screening"] = (f"{done} of {batches} requests; retries happen inside the OpenAI SDK "
+                                         "and are not counted")
+        fm.report(matches, papers, done, batches, error, MATCHES)
+    else:
+        matches, stats, error = rr.run(interest, papers, api_key, details, EMBEDDINGS)
+        seconds, usage, kw = stats["seconds"], stats["screening"], stats["keyword_extraction"]
+        TIMINGS.update({"keyword extraction": seconds["keywords"], "embedding": seconds["embedding"],
+                        "local ranking": seconds["ranking"], "LLM screening": seconds["screening"]})
+        TIMING_NOTES["keyword extraction"] = (f"{len(stats['bm25_keywords'])} terms, {kw['retries']} retries, "
+                                              f"{kw['retry_wait_seconds']:.1f} s waiting before retries")
+        TIMING_NOTES["embedding"] = f"{stats['papers_embedded']} new, {stats['papers_cached']} cached papers"
+        TIMING_NOTES["local ranking"] = f"shortlist of {stats['shortlisted']}"
+        TIMING_NOTES["LLM screening"] = (f"{stats['batches_done']} of {stats['batches']} requests, "
+                                         f"{usage['retries']} retries, {usage['retry_wait_seconds']:.1f} s "
+                                         "waiting before retries")
+        rr.print_results(matches, stats, error)
+        rr.save(matches, stats, interest, details, error, RETRIEVED, MATCHES)
+        print(f"Saved to {MATCHES}")
+        done, batches, shortlisted = stats["batches_done"], stats["batches"], stats["shortlisted"]
+        shortlist_percent = stats["shortlist_percent"]
+        keywords = stats["bm25_keywords"]
     REPORT.write_text(build_report(interest, details, rows, start, end, papers, matches, done, batches, error,
-                                   datetime.now(timezone.utc)), encoding="utf-8")
+                                   datetime.now(timezone.utc), shortlisted, keywords, shortlist_percent),
+                      encoding="utf-8")
     print(f"{'Incomplete report' if error else 'Report'} saved to {REPORT}")
+    print("\n" + timing_summary(TIMINGS, TIMING_NOTES))
 
 
 def main():

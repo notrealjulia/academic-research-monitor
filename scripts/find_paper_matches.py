@@ -14,7 +14,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from fetch_papers import PAPER_FIELDS, RETRIEVED, SELECTED, show_samples
-from find_categories import MODEL, ROOT, SetupError, load_api_key
+from find_categories import MODEL, ROOT, SetupError, load_api_key, openai_errors
 
 OUT = ROOT / "data" / "paper_matches.csv"
 CSV_FIELDS = PAPER_FIELDS + ["match_reason"]
@@ -82,7 +82,6 @@ def request_count(papers):
 
 
 def match_batch(client, interest, batch, details=""):
-    import openai
     from pydantic import BaseModel
 
     class Match(BaseModel):
@@ -92,7 +91,7 @@ def match_batch(client, interest, batch, details=""):
     class Matches(BaseModel):
         matches: list[Match]
 
-    try:
+    with openai_errors():
         response = client.responses.parse(
             model=MODEL,
             reasoning={"effort": "low"},
@@ -100,14 +99,6 @@ def match_batch(client, interest, batch, details=""):
             input=f"{format_interest(interest, details)}\n\nPapers:\n{format_batch(batch)}",
             text_format=Matches,
         )
-    except openai.AuthenticationError:
-        raise SetupError("OpenAI rejected the API key. Check OPENAI_API_KEY in .env.")
-    except openai.RateLimitError as e:
-        raise SetupError(f"OpenAI rate limit or quota exceeded: {e.message}")
-    except openai.APIConnectionError:
-        raise SetupError("Could not reach the OpenAI API. Check your internet connection.")
-    except openai.APIStatusError as e:
-        raise SetupError(f"OpenAI API error {e.status_code}: {e.message}")
     if response.output_parsed is None:
         raise SetupError("The model returned no usable answer for a batch (it may have refused).")
     return [(m.label, m.reason) for m in response.output_parsed.matches]
@@ -168,6 +159,8 @@ def print_matches(matches):
 
 
 def save(matches, path=OUT):
+    # Settings written by rerank_papers describe the file they came with; drop them when this file is replaced.
+    path.with_name(path.stem + "_settings.json").unlink(missing_ok=True)
     with path.open("w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=CSV_FIELDS, extrasaction="ignore")
         writer.writeheader()

@@ -57,7 +57,7 @@ def load_codes(path=SELECTED):
     codes = list(dict.fromkeys(r["code"].strip() for r in rows if r["code"].strip() in known))
     if not codes:
         raise SetupError(f"No valid category codes in {path}. Run find_categories again.")
-    return codes, rows
+    return codes
 
 
 def build_query(codes, start, end):
@@ -231,7 +231,7 @@ def main():
         sys.exit(2)
     try:
         day = parse_day(sys.argv[1].strip())
-        codes, _ = load_codes()
+        codes = load_codes()
         start = datetime.combine(day, dtime(0, 0), timezone.utc)
         end = datetime.combine(day, dtime(23, 59), timezone.utc)
         print(f"Categories: {', '.join(codes)} (from {SELECTED.name})")

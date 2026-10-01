@@ -13,6 +13,7 @@ Reads OPENAI_API_KEY from the environment, or from .env in the project root.
 import csv
 import os
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -33,6 +34,28 @@ For each pick, give one short sentence explaining how it connects to what the re
 
 class SetupError(Exception):
     """A problem the user can fix, reported without a traceback."""
+
+
+@contextmanager
+def openai_errors():
+    """Turn OpenAI SDK errors raised inside the block into one-line SetupErrors."""
+    import openai
+
+    try:
+        yield
+    except openai.AuthenticationError:
+        raise SetupError("OpenAI rejected the API key. Check OPENAI_API_KEY in .env.")
+    except openai.RateLimitError as e:
+        raise SetupError(f"OpenAI rate limit or quota exceeded: {e.message}")
+    except openai.APIConnectionError:
+        raise SetupError("Could not reach the OpenAI API. Check your internet connection.")
+    except openai.APIStatusError as e:
+        raise SetupError(f"OpenAI API error {e.status_code}: {e.message}")
+
+
+def group(row):
+    """'Physics > Astrophysics', or just the field when there is no subfield."""
+    return row["field"] + (f" > {row['subfield']}" if row["subfield"] else "")
 
 
 def load_taxonomy(path=TAXONOMY):
@@ -58,8 +81,7 @@ def load_api_key(env_file=ENV_FILE):
 def format_taxonomy(taxonomy):
     lines = []
     for row in taxonomy.values():
-        group = row["field"] + (f" > {row['subfield']}" if row["subfield"] else "")
-        lines.append(f"{row['code']} | {row['subject']} | {group} | {row['description']}")
+        lines.append(f"{row['code']} | {row['subject']} | {group(row)} | {row['description']}")
     return "code | name | field > subfield | description\n" + "\n".join(lines)
 
 
@@ -76,7 +98,7 @@ def ask_model(interest, taxonomy, api_key):
         categories: list[Pick]
 
     client = openai.OpenAI(api_key=api_key)
-    try:
+    with openai_errors():
         response = client.responses.parse(
             model=MODEL,
             reasoning={"effort": "low"},
@@ -84,14 +106,6 @@ def ask_model(interest, taxonomy, api_key):
             input=f"Researcher's interests:\n{interest}\n\narXiv categories:\n{format_taxonomy(taxonomy)}",
             text_format=Picks,
         )
-    except openai.AuthenticationError:
-        raise SetupError("OpenAI rejected the API key. Check OPENAI_API_KEY in .env.")
-    except openai.RateLimitError as e:
-        raise SetupError(f"OpenAI rate limit or quota exceeded: {e.message}")
-    except openai.APIConnectionError:
-        raise SetupError("Could not reach the OpenAI API. Check your internet connection.")
-    except openai.APIStatusError as e:
-        raise SetupError(f"OpenAI API error {e.status_code}: {e.message}")
 
     if response.output_parsed is None:
         raise SetupError("The model returned no usable answer (it may have refused). Try rewording.")
@@ -120,8 +134,7 @@ def validate(picks, taxonomy):
 
 def print_results(rows, rejected):
     for i, row in enumerate(rows, 1):
-        group = row["field"] + (f" > {row['subfield']}" if row["subfield"] else "")
-        print(f"{i}. {row['code']}  {row['subject']}  ({group})")
+        print(f"{i}. {row['code']}  {row['subject']}  ({group(row)})")
         print(f"   {row['reason']}\n")
     if rejected:
         print(f"Ignored codes not in the taxonomy: {', '.join(rejected)}\n")
